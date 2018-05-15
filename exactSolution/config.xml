@@ -1,0 +1,9 @@
+<configurations>
+	<edges>
+		<edge latency="0.05"></edge>
+		<edge latency="0.01"></edge>
+		<edge latency="0.02"></edge>
+		<edge latency="0.008"></edge>
+		<edge></edge>
+	</edges>
+</configurations>
