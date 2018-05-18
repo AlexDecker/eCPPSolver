@@ -56,7 +56,7 @@ def generateLatencyConstraint(adjMatrix,latencyMatrix,maxTotalLatency):
 def generateCouplingConstraints(adjMatrix):
 	#for each controller
 	for j in range(len(adjMatrix)):
-		s='\tOverchargeConstr'+str(j)+':'
+		s='\tCouplingConstr'+str(j)+':'
 		first=True
 		#for each switch (reminding it is a square mat.)
 		for i in range(len(adjMatrix)):

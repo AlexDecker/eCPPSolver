@@ -14,12 +14,11 @@ def varCost(costList,totalEnergyMatrix,adjMatrix):
 			if adjMatrix[i][j]:
 				#the name of each variable corresponds to
 				#its coordinates.
-				s = s+' '+str(totalEnergyMatrix[i][j]*costList[j])\
+				s = s+'+ '+str(totalEnergyMatrix[i][j]*costList[j])\
 					+' e'+str(i)+'_'+str(j)+' '	
-	#the worst case total latency must not exceed a value
 	return s
 
 def generateObjective(costList,totalEnergyMatrix,adjMatrix):
 	print 'Minimize'
-	print ('\tobj: '+constCost(costList)+' + '+varCost(\
+	print ('\tobj: '+constCost(costList)+varCost(\
 		costList,totalEnergyMatrix,adjMatrix))

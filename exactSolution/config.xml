@@ -3,7 +3,7 @@
 		<node freq="1000" cost="1" procTime="0.012"></node>
 		<node freq="8000" cost="2" procTime="0.015"></node>
 		<node freq="6000" cost="2" procTime="0.005"></node>
-		<node freq="2000" cost="0.5" procTime="0.01"></node>
+		<node freq="2001" cost="0.5" procTime="0.01"></node>
 	</nodes>
 	<edges>
 		<edge propTime="0.05" energyCost="0.025" node1="0" node2="1"></edge>
