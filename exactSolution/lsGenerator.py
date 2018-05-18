@@ -15,13 +15,16 @@ def main():
 
 	inst = inputParser.eCPPInstance(sys.argv[1])
 	maxTotalLatency = inst.getMaxTotalLatency()
-	adjMatrix, latencyMatrix, totalEnergyMatrix = inst.getAdjMatrices()
-	sfreq, cfreq = inst.getFrequencies()
+	adjMatrix, latencyMatrix, energy = inst.getAdjMatrices()
+	sFreq, cFreq = inst.getFrequencies()
 	costList = inst.getCostList()
+	sProcEnergy,cProcEnergy = inst.getProcEnergy()
+	cPower = inst.getStaticPower()
 	
-	objective.generateObjective(costList,totalEnergyMatrix,adjMatrix)
+	objective.generateObjective(costList,cPower,adjMatrix,energy,\
+				sProcEnergy,cProcEnergy,sFreq)
 	
-	constraints.generateConstraints(adjMatrix,sfreq,cfreq,\
+	constraints.generateConstraints(adjMatrix,sFreq,cFreq,\
 				latencyMatrix,maxTotalLatency)
 	
 	print 'Binary'

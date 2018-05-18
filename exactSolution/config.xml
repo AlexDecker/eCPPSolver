@@ -1,9 +1,9 @@
 <configurations>
 	<nodes>
-		<node freq="1000" cost="1" procTime="0.012"></node>
-		<node freq="8000" cost="2" procTime="0.015"></node>
-		<node freq="6000" cost="2" procTime="0.005"></node>
-		<node freq="2001" cost="0.5" procTime="0.01"></node>
+		<node freq="1000" cost="1" procEnergy="0.002" procTime="0.012"></node>
+		<node freq="8000" cost="2" procEnergy="0.001" procTime="0.015"></node>
+		<node freq="6000" cost="2" procEnergy="0.003" procTime="0.005"></node>
+		<node freq="2001" cost="0.5" procEnergy="0.002" procTime="0.01"></node>
 	</nodes>
 	<edges>
 		<edge propTime="0.05" energyCost="0.025" node1="0" node2="1"></edge>
@@ -11,7 +11,7 @@
 		<edge propTime="0.02" energyCost="0.01" node1="1" node2="3"></edge>
 		<edge propTime="0.008" energyCost="0.004" node1="2" node2="3"></edge>
 	</edges>
-	<controller freq="10000" Power0="100" procEnergy="0.005" procTime="0.01"></controller>
+	<controller freq="10000" staticPower="100" procEnergy="0.005" procTime="0.01"></controller>
 	<maxTotalLatency value="1.0"></maxTotalLatency>
 	<maxSingleLatency value="0.5"></maxSingleLatency>
 </configurations>

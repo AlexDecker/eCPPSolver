@@ -26,26 +26,6 @@ class eCPPInstance:
 		
 		return latencyMatrix, adjMatrix
 	
-	#the total energy spent by a single request+response (only controller's side)
-	def _getTotalEnergyMatrix(self,adjMatrix,energyMatrix):
-		
-		cProcEnergy = float(self.controller.attributes['procEnergy'].value)
-		
-		totalEnergyMatrix = [[0 for i in adjMatrix] for j in adjMatrix]
-		
-		#for each switch
-		for i in range(len(adjMatrix)):
-			#for each possible location of a controller
-			for j in range(len(adjMatrix[i])):
-				#if the switch/controller edge exists
-				#the energy cost for the controller is its constant energy spent
-				#for processing a request plus the cost of sending a message back
-				#(from the controller j to the switch i)
-				if adjMatrix[i][j]:
-					totalEnergyMatrix[i][j] = cProcEnergy+energyMatrix[j][i];
-		
-		return totalEnergyMatrix
-	
 	def __init__(self, fileName):
 		
 		data = minidom.parse(fileName)
@@ -109,9 +89,8 @@ class eCPPInstance:
 		
 		latencyMatrix,adjMatrix = self._eliminateLargeLatency(adjMatrix,propTimeMatrix,\
 									sProcTimeVector,cProcTime)
-		totalEnergyMatrix = self._getTotalEnergyMatrix(adjMatrix,energyMatrix)
 		
-		return adjMatrix, latencyMatrix, totalEnergyMatrix
+		return adjMatrix, latencyMatrix, energyMatrix
 	
 	#returns a list sfreq of the request frequencies of each switch and a float
 	#cfreq with the maximum response frequency of the controller
@@ -130,4 +109,18 @@ class eCPPInstance:
 		for n in self.nodeList:
 			costList.append(float(n.attributes['cost'].value))
 		return costList
-
+	
+	#returns the power of the controller when not processing any request
+	def getStaticPower(self):
+		return float(self.controller.attributes['staticPower'].value)
+	
+	#returns the energy spent by the controller (cProcEnergy) for processing
+	#one response and the energy spent by each switch (sProcEnergy) for
+	#processing one request
+	def getProcEnergy(self):
+		cProcEnergy = float(self.controller.attributes['procEnergy'].value)
+		sProcEnergy = []
+		for n in self.nodeList:
+			sProcEnergy.append(float(n.attributes['procEnergy'].value))
+		
+		return sProcEnergy, cProcEnergy
