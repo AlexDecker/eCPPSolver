@@ -1,4 +1,4 @@
-<configurations>
+<settings autoGen="False">
 	<nodes>
 		<node freq="1000" cost="1" procEnergy="0.002" procTime="0.012"></node>
 		<node freq="8000" cost="2" procEnergy="0.001" procTime="0.015"></node>
@@ -14,4 +14,4 @@
 	<controller freq="10000" staticPower="100" procEnergy="0.005" procTime="0.01"></controller>
 	<maxTotalLatency value="1.0"></maxTotalLatency>
 	<maxSingleLatency value="0.5"></maxSingleLatency>
-</configurations>
+</settings>

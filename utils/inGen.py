@@ -1,4 +1,5 @@
 import random
+from math import radians, cos, sin, asin, sqrt
 
 #the matrix generated has always the main diagonal with ones
 #and is symmetric. So, m is the number of desired edges
@@ -72,7 +73,7 @@ def genRandomAdjMatrix(n,m):
 				adjMatrix[j][i]=1
 	
 	return adjMatrix
-
+##################################################################################
 #generates a cFreq value in order to ensure at least one solution
 #(len(sFreq) must be equals to len(adjMatrix) and adjMatrix must be
 #square)
@@ -101,3 +102,80 @@ def genCFreq(adjMatrix,sFreq,nSamples):
 	for i in range(nSamples):
 		samples.append(genCFreq_simple(adjMatrix,sFreq))
 	return min(samples)
+##################################################################################
+#generates a maxTotalLatency value in order to ensure at least one solution
+#(the dimensions of both matrices must be the same)
+def genMaxTotalLatency_simple(adjMatrix,latencyMatrix):
+	maxTotalLatency = 0
+	for i in range(len(adjMatrix)):
+		adjList = []
+		for j in range(len(adjMatrix)):
+			if(adjMatrix[i][j]==1):
+				adjList.append(j)
+		#choose a random controller to connect
+		k = random.choice(adjList)
+		#enlarge the total latency
+		maxTotalLatency = maxTotalLatency + latencyMatrix[i][k]
+	return maxTotalLatency
+
+#The same of the last function, but now returning the min of n samples
+def genMaxTotalLatency(adjMatrix,latencyMatrix,nSamples):
+	samples = []
+	for i in range(nSamples):
+		samples.append(genMaxTotalLatency_simple(adjMatrix,latencyMatrix))
+	return min(samples)
+##################################################################################
+#haversine formula (distance between geographical coordinates)
+def haversine(lon1, lat1, lon2, lat2):
+    # convert decimal degrees to radians 
+    lon1, lat1, lon2, lat2 = map(radians, [lon1, lat1, lon2, lat2])
+
+    # haversine formula (https://en.wikipedia.org/wiki/Haversine_formula)
+    dlon = lon2 - lon1 
+    dlat = lat2 - lat1 
+    a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+    c = 2 * asin(sqrt(a)) 
+    r = 6371 # Radius of earth in kilometers
+    return c * r
+
+#generates a random placement for the possible locations
+def genRandomDistMatrix(adjMatrix,minLon,maxLon,minLat,maxLat):
+	latitude = []
+	longitude = []
+	for i in range(len(adjMatrix)):
+		latitude.append(random.uniform(minLat,maxLat))
+		longitude.append(random.uniform(minLon,maxLon))
+	distMatrix = [[0 for i in range(len(adjMatrix))] for j in range(len(adjMatrix))]
+	for i in range(len(adjMatrix)):
+		for j in range(len(adjMatrix[i])):
+			if(adjMatrix[i][j]==1):
+				distMatrix[i][j]=haversine(longitude[i],latitude[i],\
+					longitude[j],latitude[j])
+	return distMatrix
+##################################################################################
+#cMatrix is the velocity of the light in each link
+def genPropTimeMatrix(cMatrix,distMatrix):
+	propTimeMatrix = [[0 for i in range(len(distMatrix))]\
+		for j in range(len(distMatrix))]
+	
+	for i in range(len(propTimeMatrix)):
+		for j in range(len(propTimeMatrix[i])):
+			propTimeMatrix[i][j] = distMatrix[i][j]/cMatrix[i][j]
+	return propTimeMatrix
+
+def genLatencyMatrix(cMatrix,distMatrix,sProcTime,cProcTime):
+	latencyMatrix = genPropTimeMatrix(cMatrix,distMatrix)
+	for i in range(len(latencyMatrix)):
+		for j in range(len(latencyMatrix[i])):
+			latencyMatrix[i][j] = 2*latencyMatrix[i][j]+sProcTime[i]+cProcTime
+	return latencyMatrix
+##################################################################################
+#calculates the energy needed to send a message through each link
+#eMatrix is energy(J) per bit per km in each link. avgMsgSize is in bits
+def genEnergyMatrix(eMatrix,distMatrix,avgMsgSize):
+	energyMatrix = [[0 for i in range(len(distMatrix))]\
+		for j in range(len(distMatrix))]
+	for i in range(len(energyMatrix)):
+		for j in range(len(energyMatrix[i])):
+			energyMatrix[i][j] = energyMatrix[i][j]*eMatrix[i][j]*avgMsgSize
+	return energyMatrix

@@ -7,6 +7,7 @@ import sys
 sys.path.insert(0,'../utils')
 
 import inputParser
+import inGen
 
 def main():
 	if(len(sys.argv)!=2):
@@ -20,6 +21,13 @@ def main():
 	costList = inst.getCostList()
 	sProcEnergy,cProcEnergy = inst.getProcEnergy()
 	cPower = inst.getStaticPower()
+	
+	nSamples = 10
+	if(cFreq==-1):
+		cFreq = inGen.genCFreq(adjMatrix,sFreq,nSamples)
+	if(maxTotalLatency==-1):
+		maxTotalLatency = inGen.genMaxTotalLatency(adjMatrix,\
+			latencyMatrix,nSamples)
 	
 	objective.generateObjective(costList,cPower,adjMatrix,energy,\
 				sProcEnergy,cProcEnergy,sFreq)
