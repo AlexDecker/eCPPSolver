@@ -3,7 +3,7 @@
 import sys
 
 def main():
-	if(len(sys.argv)!=2):
+	if(len(sys.argv)!=4):
 		print 'Usage: logger [log file].log'
 		exit()
 	while(True):
@@ -15,7 +15,8 @@ def main():
 		if(line_l[0]=='Objective:'):
 			val = float(line_l[4])
 			break
+	time = float(sys.argv[3])-float(sys.argv[2])
 	with open(sys.argv[1], "a") as myfile:
-		myfile.write(str(val)+'\n')
+		myfile.write(str(time)+', '+str(val)+';\n')
 
 main()
