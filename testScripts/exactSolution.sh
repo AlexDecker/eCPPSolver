@@ -1,5 +1,7 @@
 #!/bin/bash
-./lsGenerator.py $1 > outputLsGenerator.lp
+
+#Usage: exactSolution.sh [xml_file] [log_file] [experiment_id]
+../exactSolution/lsGenerator.py $1 > outputLsGenerator.lp
 startTime=`date +%s.%N`
 glpsol --cpxlp outputLsGenerator.lp -o outputGLPK.txt >/dev/null
 endTime=`date +%s.%N`
