@@ -1,3 +1,6 @@
+#ifndef STRUCTURES_H
+#define STRUCTURES_H
+
 #include <stdlio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -15,7 +18,6 @@ typedef struct{
 
 typedef struct{
 	switchDevice switchDev;
-	bool hasController;
 	double energyCost;//cost per joule
 }location;
 
@@ -40,3 +42,5 @@ typedef struct{
 	double bestTotalCost;
 	bool** bestCtrlAdjMatrix;
 }ctrlConnections;
+
+#endif
