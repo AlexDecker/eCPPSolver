@@ -1,3 +1,6 @@
+#This file contains functions that can be used to generate
+#a random solvable intance of the problem
+
 import random
 from math import radians, cos, sin, asin, sqrt
 
