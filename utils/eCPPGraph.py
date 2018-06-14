@@ -1,3 +1,5 @@
+import numpy
+
 import inputParser #input informed by the user
 import inGen #randomly generated input
 
@@ -38,6 +40,7 @@ class node:
 		self.demand = demand
 		self.capacity = capacity
 		self.weight = weight
+		self._neighborhood = []
 	
 	def addEdge(self,edge):
 		self._neighborhood.append(edge)
@@ -59,10 +62,8 @@ class node:
 
 class graph:
 	
-	nodeList = []
-	maxTotalLatency = -1
-	
 	def __init__(self,filename,nSamples=10):
+		self.nodeList = []
 		#read file and get/generate the parameters
 		inst = inputParser.eCPPInstance(filename)
 		self.maxTotalLatency = inst.getMaxTotalLatency()
@@ -71,7 +72,6 @@ class graph:
 		costList = inst.getCostList()
 		sProcEnergy,cProcEnergy = inst.getProcEnergy()
 		cPower = inst.getStaticPower()
-		
 		if(cFreq==-1):
 			cFreq = inGen.genCFreq(adjMatrix,sFreq,nSamples)
 		if(self.maxTotalLatency==-1):
@@ -89,7 +89,7 @@ class graph:
 			n = node(sFreq[i],cFreq,weight)
 			
 			for j in range(len(adjMatrix)):
-				if(adjMatrix[i][j]==1):
+				if((adjMatrix[i][j]==1) and (i!=j)):
 					#cost for keeping connected with the controller in j
 					weight = costList[i]*energy[i][j]+costList[j]*(Eproc+energy[j][i])
 					n.addEdge(edge(latencyMatrix[i][j],weight,j))
