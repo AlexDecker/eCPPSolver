@@ -61,8 +61,11 @@ class eCPPInstance:
 			self.minCost = float(config[0].attributes['minCost'].value)
 			self.maxCost = float(config[0].attributes['maxCost'].value)
 			
-			self.minStaticPower = float(config[0].attributes['minControllerStaticPower'].value)
-			self.maxStaticPower = float(config[0].attributes['maxControllerStaticPower'].value)
+			self.minControllerStaticPower = float(config[0].attributes['minControllerStaticPower'].value)
+			self.maxControllerStaticPower = float(config[0].attributes['maxControllerStaticPower'].value)
+			
+			self.minSwitchStaticPower = float(config[0].attributes['minSwitchStaticPower'].value)
+			self.maxSwitchStaticPower = float(config[0].attributes['maxSwitchStaticPower'].value)
 			
 			self.minCProcEnergy = float(\
 				config[0].attributes['minControllerPacketProcessingEnergy'].value)
@@ -183,12 +186,19 @@ class eCPPInstance:
 				costList.append(float(n.attributes['cost'].value))
 		return costList
 	
-	#returns the power of the controller when not processing any request
+	#returns the power of the controller when not processing any response
+	#and the power of each switch when not processing any frame
 	def getStaticPower(self):
 		if(self.autoGen):
-			return random.uniform(self.minStaticPower,self.maxStaticPower)
+			cPower = random.uniform(self.minControllerStaticPower,self.maxControllerStaticPower)
+			sPower = [random.uniform(self.minSwitchStaticPower,self.maxSwitchStaticPower)\
+				for i in range(self.nNodes)]
 		else:
-			return float(self.controller.attributes['staticPower'].value)
+			cPower = float(self.controller.attributes['staticPower'].value)
+			sPower = []
+			for n in self.nodeList:
+				sPower.append(float(n.attributes['staticPower'].value))
+		return cPower, sPower
 	
 	#returns the energy spent by the controller (cProcEnergy) for processing
 	#one response and the energy spent by each switch (sProcEnergy) for

@@ -5,14 +5,12 @@ import inGen #randomly generated input
 
 #edges representing the control links
 class edge:
-	#this is called latency just for reasons of consistency, but is the
+	#-latency: this is called latency just for reasons of consistency, but is the
 	#expected RTT for a Request+Response, considering the processing time and
 	#the propagation time
-	latency = 0
-	#the energy spent with requst+responses between those two nodes
-	weight = 0
-	#id of the node to which the edge goes
-	toNode = -1
+	#-weight: the energy spent with requst+responses between those two nodes
+	#-toNode: id of the node to which the edge goes
+	
 	
 	def __init__(self,latency,weight,toNode):
 		self.latency = latency
@@ -25,22 +23,18 @@ class edge:
 
 #node representing a location of the original problem
 class node:
-	#the same of sFreq (how much requests are sent for each time interval)
-	demand = 0
-	#the same of cFreq (how much responses can be sent for each time interval)
-	capacity = 1
-	#the energy needed to maintain itself as a controller (not considering outter links)
-	weight = 0
-	#the locations connected to this one by control links (List of edges)
-	_neighborhood = []
-	#this can be freely altered without losing data
-	neighborhood_sandbox = []
+	#-demand: the same of sFreq (how much requests are sent for each time interval)
+	#-capacity: the same of cFreq (how much responses can be sent for each time interval)
+	#-weight: the energy needed to maintain itself as a controller (not considering outter links)
+	#-_neighborhood: the locations connected to this one by control links (List of edges)
+	#-neighborhood_sandbox: this can be freely altered without losing data
 	
 	def __init__(self,demand,capacity,weight):
 		self.demand = demand
 		self.capacity = capacity
 		self.weight = weight
 		self._neighborhood = []
+		self.neighborhood_sandbox = []
 	
 	def addEdge(self,edge):
 		self._neighborhood.append(edge)
@@ -70,8 +64,8 @@ class graph:
 		adjMatrix, latencyMatrix, energy = inst.getAdjMatrices()
 		sFreq, cFreq = inst.getFrequencies()
 		costList = inst.getCostList()
-		sProcEnergy,cProcEnergy = inst.getProcEnergy()
-		cPower = inst.getStaticPower()
+		_,cProcEnergy = inst.getProcEnergy()
+		cPower,_ = inst.getStaticPower()
 		if(cFreq==-1):
 			cFreq = inGen.genCFreq(adjMatrix,sFreq,nSamples)
 		if(self.maxTotalLatency==-1):
@@ -91,7 +85,8 @@ class graph:
 			for j in range(len(adjMatrix)):
 				if((adjMatrix[i][j]==1) and (i!=j)):
 					#cost for keeping connected with the controller in j
-					weight = costList[i]*energy[i][j]+costList[j]*(Eproc+energy[j][i])
+					weight = costList[i]*sFreq[i]*energy[i][j]\
+						+costList[j]*(Eproc+sFreq[i]*energy[j][i])
 					n.addEdge(edge(latencyMatrix[i][j],weight,j))
 			
 			self.nodeList.append(n)

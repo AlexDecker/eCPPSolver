@@ -19,8 +19,8 @@ def main():
 	adjMatrix, latencyMatrix, energy = inst.getAdjMatrices()
 	sFreq, cFreq = inst.getFrequencies()
 	costList = inst.getCostList()
-	sProcEnergy,cProcEnergy = inst.getProcEnergy()
-	cPower = inst.getStaticPower()
+	_,cProcEnergy = inst.getProcEnergy()
+	cPower,_ = inst.getStaticPower()
 	
 	nSamples = 10
 	if(cFreq==-1):
@@ -30,7 +30,7 @@ def main():
 			latencyMatrix,nSamples)
 	
 	objective.generateObjective(costList,cPower,adjMatrix,energy,\
-				sProcEnergy,cProcEnergy,sFreq)
+				cProcEnergy,sFreq)
 	
 	constraints.generateConstraints(adjMatrix,sFreq,cFreq,\
 				latencyMatrix,maxTotalLatency)

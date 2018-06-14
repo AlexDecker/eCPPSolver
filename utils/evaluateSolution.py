@@ -2,7 +2,8 @@
 #placementVector (a binary vector that points what locations have a
 #controller) and the connectionMatrix (a binary matrix that points if
 #switch i has a control connection with the controller at location j)
-#and evaluates its energy consumption
+#and evaluates its energy consumption (including constant values, so
+#the value evaluated here will be greater than glpk's)
 
 def isFeasible(placementVector, connectionMatrix, adjMatrix,\
 	latencyMatrix,sFreq,cFreq,maxTotalLatency):
@@ -37,14 +38,15 @@ def isFeasible(placementVector, connectionMatrix, adjMatrix,\
 			return False
 	return True
 
-def evaluate(placementVector, connectionMatrix, costList, cPower, energy,\
-	sProcEnergy,cProcEnergy,sFreq):
+def evaluate(placementVector, connectionMatrix, costList, cPower, sPower,\
+	energy,sProcEnergy,cProcEnergy,sFreq):
 	tCost = 0
 	
 	#(static cost)
 	for j in range(len(placementVector)):
+		tCost = tCost+costList[j]*sPower#switch
 		if(placementVector[j]==1):
-			tCost = tCost+costList[j]*cPower
+			tCost = tCost+costList[j]*cPower#controller
 	
 	#(cost due request processing)
 	#for each switch
@@ -60,5 +62,5 @@ def evaluate(placementVector, connectionMatrix, costList, cPower, energy,\
 				cEnergy = cProcEnergy+energy[j][i]
 				
 				#total cost for the link i,j within 1 s
-				tCost = tCost+(sEnergy*costList[i]
+				tCost = tCost+(sEnergy*costList[i]\
 					+ cEnergy*costList[j])*sFreq[i]

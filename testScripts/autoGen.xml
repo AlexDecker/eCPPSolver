@@ -23,6 +23,8 @@
 	maxControllerStaticPower = "600"
 	minControllerPacketProcessingEnergy = "0.005"
 	maxControllerPacketProcessingEnergy = "0.007"
+	minSwitchStaticPower = "200"
+	maxSwitchStaticPower = "300"
 	minSwitchPacketProcessingEnergy = "0.001"
 	maxSwitchPacketProcessingEnergy = "0.003"
 ></settings>
