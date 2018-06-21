@@ -1,7 +1,7 @@
 <settings
 	autoGen="True"
-	nNodes="13"
-	nEdges="39"	
+	nNodes="5"
+	nEdges="6"	
 	minLongitude="10"
 	maxLongitude="20"
 	minLatitude ="10"

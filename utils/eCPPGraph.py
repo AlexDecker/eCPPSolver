@@ -54,6 +54,7 @@ class node:
 		for e in self.neighborhood_sandbox:
 			e.printEdge()
 
+#symmetrical graph
 class graph:
 	
 	def __init__(self,filename,nSamples=10):
@@ -72,6 +73,15 @@ class graph:
 			self.maxTotalLatency = inGen.genMaxTotalLatency(adjMatrix,\
 				latencyMatrix,nSamples)
 		
+		warning=False
+		for i in range(len(adjMatrix)):
+			for j in range(len(adjMatrix)):
+				if adjMatrix[i][j] != adjMatrix[j][i]:
+					adjMatrix[i][j] = adjMatrix[j][i]
+					warning=True
+		if warning:
+			print 'Warning: adjMatrix modified to became symmetrical'
+		
 		#organize the parameters more efficiently
 		for i in range(len(adjMatrix)):
 			#energy needed by the controller to process the requests from this switch
@@ -84,6 +94,8 @@ class graph:
 			
 			for j in range(len(adjMatrix)):
 				if((adjMatrix[i][j]==1) and (i!=j)):
+					if(adjMatrix[j][i]!=1):
+						print 'Nao eh simetrica'
 					#cost for keeping connected with the controller in j
 					weight = costList[i]*sFreq[i]*energy[i][j]\
 						+costList[j]*(Eproc+sFreq[i]*energy[j][i])
@@ -98,7 +110,16 @@ class graph:
 			self.nodeList[i].printNode()
 	
 	def printCurrentGraph(self):
-		print 'printing the original graph for this instance...\n'
+		print 'printing the current graph for this instance...\n'
 		for i in range(len(self.nodeList)):
 			print 'Node #'+str(i) 
 			self.nodeList[i].printCurrNode()
+	
+	def makeSandBox(self):
+		for n in self.nodeList:
+			n.makeSandBox()
+	
+	def sortEdgesByDemand(self):
+		for n in self.nodeList:
+			n.neighborhood_sandbox.sort(key=lambda e:self.nodeList[e.toNode].demand,\
+				reverse = True) 
