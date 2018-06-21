@@ -21,7 +21,7 @@ def efficiency(g,node,domSet):
 		return 0,0 #no capacity -> no efficiency
 	
 	for e in g.nodeList[node].neighborhood_sandbox:
-		if node not in domSet:
+		if domSet[node]==0:
 			x = g.nodeList[node].demand #it must include its own demand
 		else:
 			x = 0 #its demant yet have been included
@@ -47,10 +47,10 @@ def efficiency(g,node,domSet):
 	
 	return maxRatio,maxIndex
 
-def mostEfficientNode(g,domSet):
+def mostEfficientNode(g,domSet,notDom):
 	maxEff = 0
 	maxIndex = 0
-	bestNode = -1
+	bestNode = 0
 	for i in range(len(g.nodeList)):
 		eff,ind = efficiency(g,i,domSet)
 		if(eff>=maxEff):#if all are 0, any node can be returned
@@ -58,8 +58,8 @@ def mostEfficientNode(g,domSet):
 				maxEff = eff
 				maxIndex = ind
 				bestNode = i
-			elif(i not in domSet):
-				#prefer the ones which still are not in dominanting set
+			elif(i in notDom):
+				#prefer the ones that still are not dominated
 				maxEff = eff
 				maxIndex = ind
 				bestNode = i
@@ -70,7 +70,7 @@ def solve(g):
 	g.sortEdgesByDemand()
 	
 	notDom = [i for i in range(len(g.nodeList))] #undominated vertices
-	domSet = [] #dominating set
+	domSet = [0 for i in range(len(g.nodeList))] #dominating set
 	
 	#the bit map matrix that says if node i is dominated by node j
 	assign = [[0 for j in range(len(g.nodeList))]\
@@ -78,12 +78,12 @@ def solve(g):
 	
 	while notDom != []:
 		#get the most efficient vertex
-		u,ind = mostEfficientNode(g,domSet)
+		u,ind = mostEfficientNode(g,domSet,notDom)
 		
 		#insert it into the dominating set
-		if u not in domSet:
+		if domSet[u]==0:
 			assign[u][u] = 1
-			domSet.append(u)
+			domSet[u]=1
 			g.nodeList[u].capacity = g.nodeList[u].capacity\
 				-g.nodeList[u].demand
 			#for each neighbor
@@ -106,8 +106,10 @@ def solve(g):
 		except ValueError:
 			pass #just ignore
 		
-		for i in range(ind):
-			n = g.nodeList[u].neighborhood_sandbox[i].toNode
+		neighbors = g.nodeList[u].neighborhood_sandbox[:ind]
+		
+		for neighbor in neighbors:
+			n = neighbor.toNode
 			
 			if n in notDom:
 				#remove the neighbor from the undomined vertex set
