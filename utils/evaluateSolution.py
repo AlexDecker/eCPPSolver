@@ -1,11 +1,22 @@
-#this file has two functions that validate some configuration of both
+#this file validates some configuration of both
 #placementVector (a binary vector that points what locations have a
 #controller) and the connectionMatrix (a binary matrix that points if
 #switch i has a control connection with the controller at location j)
 #and evaluates its energy consumption (including constant values, so
 #the value evaluated here will be greater than glpk's)
 
-def isFeasible(placementVector, connectionMatrix, adjMatrix,\
+import eCPPGraph
+
+def eval(placementVector, connectionMatrix, graph):
+	f = evaluateFeasibility(placementVector, connectionMatrix,\
+		graph.adjMatrix,graph.latencyMatrix,\
+		graph.sFreq,graph.cFreq,graph.maxTotalLatency)
+	v = evaluateValue(placementVector, connectionMatrix,\
+		graph.costList, graph.cPower, graph.sPower,\
+		graph.energy, graph.sProcEnergy, graph.cProcEnergy, graph.sFreq)
+	return v, f
+
+def evaluateFeasibility(placementVector, connectionMatrix, adjMatrix,\
 	latencyMatrix,sFreq,cFreq,maxTotalLatency):
 	for i in range(len(placementVector)):
 		connections = 0
@@ -20,7 +31,7 @@ def isFeasible(placementVector, connectionMatrix, adjMatrix,\
 					#does not exist
 				connections = connections+1
 		if(connections!=1):
-			'Invalid: Connectivity Constraint'
+			print 'Invalid: Connectivity Constraint'
 			return False #each switch has one connection with a
 			#controller
 	totalLatency = 0
@@ -31,20 +42,20 @@ def isFeasible(placementVector, connectionMatrix, adjMatrix,\
 				totalLatency = totalLatency + latencyMatrix[i][j]
 				charge = charge+sFreq[i]
 		if(charge>cFreq):
-			'Invalid: Overcharge Constraint'
+			print 'Invalid: Overcharge Constraint'
 			return False
 		if(totalLatency>maxTotalLatency):
-			'Invalid: Latency Constraint'
+			print 'Invalid: Latency Constraint'
 			return False
 	return True
 
-def evaluate(placementVector, connectionMatrix, costList, cPower, sPower,\
+def evaluateValue(placementVector, connectionMatrix, costList, cPower, sPower,\
 	energy,sProcEnergy,cProcEnergy,sFreq):
 	tCost = 0
 	
 	#(static cost)
 	for j in range(len(placementVector)):
-		tCost = tCost+costList[j]*sPower#switch
+		tCost = tCost+costList[j]*sPower[j]#switch
 		if(placementVector[j]==1):
 			tCost = tCost+costList[j]*cPower#controller
 	
@@ -64,3 +75,4 @@ def evaluate(placementVector, connectionMatrix, costList, cPower, sPower,\
 				#total cost for the link i,j within 1 s
 				tCost = tCost+(sEnergy*costList[i]\
 					+ cEnergy*costList[j])*sFreq[i]
+	return tCost

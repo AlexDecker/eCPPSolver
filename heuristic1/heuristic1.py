@@ -1,10 +1,9 @@
 import sys
 sys.path.insert(0,'../utils')
 import eCPPGraph
-import evaluateSolution
-
-import numpy
 import capacitedDominantingSet
+import evaluateSolution
+import numpy
 
 g = eCPPGraph.graph('../testScripts/autoGen.xml')
 
@@ -14,3 +13,6 @@ g.printCurrentGraph()
 s,a = capacitedDominantingSet.solve(g)
 print s
 print numpy.matrix(a)
+v,f = evaluateSolution.eval(s,a,g)
+print v
+print f

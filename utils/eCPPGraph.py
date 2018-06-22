@@ -56,50 +56,51 @@ class node:
 
 #symmetrical graph
 class graph:
-	
+	#this class has both matricial and graph representations. Each representation
+	#is useful for some reason in terms of efficiency
 	def __init__(self,filename,nSamples=10):
 		self.nodeList = []
 		#read file and get/generate the parameters
 		inst = inputParser.eCPPInstance(filename)
 		self.maxTotalLatency = inst.getMaxTotalLatency()
-		adjMatrix, latencyMatrix, energy = inst.getAdjMatrices()
-		sFreq, cFreq = inst.getFrequencies()
-		costList = inst.getCostList()
-		_,cProcEnergy = inst.getProcEnergy()
-		cPower,_ = inst.getStaticPower()
-		if(cFreq==-1):
-			cFreq = inGen.genCFreq(adjMatrix,sFreq,nSamples)
+		self.adjMatrix, self.latencyMatrix, self.energy = inst.getAdjMatrices()
+		self.sFreq, self.cFreq = inst.getFrequencies()
+		self.costList = inst.getCostList()
+		self.sProcEnergy, self.cProcEnergy = inst.getProcEnergy()
+		self.cPower, self.sPower = inst.getStaticPower()
+		
+		if(self.cFreq==-1):
+			self.cFreq = inGen.genCFreq(self.adjMatrix,self.sFreq,\
+				nSamples)
 		if(self.maxTotalLatency==-1):
-			self.maxTotalLatency = inGen.genMaxTotalLatency(adjMatrix,\
-				latencyMatrix,nSamples)
+			self.maxTotalLatency = inGen.genMaxTotalLatency(self.adjMatrix,\
+				self.latencyMatrix, nSamples)
 		
 		warning=False
-		for i in range(len(adjMatrix)):
-			for j in range(len(adjMatrix)):
-				if adjMatrix[i][j] != adjMatrix[j][i]:
-					adjMatrix[i][j] = adjMatrix[j][i]
+		for i in range(len(self.adjMatrix)):
+			for j in range(len(self.adjMatrix)):
+				if self.adjMatrix[i][j] != self.adjMatrix[j][i]:
+					self.adjMatrix[i][j] = self.adjMatrix[j][i]
 					warning=True
 		if warning:
 			print 'Warning: adjMatrix modified to became symmetrical'
 		
 		#organize the parameters more efficiently
-		for i in range(len(adjMatrix)):
+		for i in range(len(self.adjMatrix)):
 			#energy needed by the controller to process the requests from this switch
-			Eproc = sFreq[i]*cProcEnergy
+			Eproc = self.sFreq[i]*self.cProcEnergy
 			
 			#cost for keeping the controller here (without constant_costs)
-			weight = costList[i]*(cPower+Eproc)
+			weight = self.costList[i]*(self.cPower+Eproc)
 			
-			n = node(sFreq[i],cFreq,weight)
+			n = node(self.sFreq[i],self.cFreq,weight)
 			
-			for j in range(len(adjMatrix)):
-				if((adjMatrix[i][j]==1) and (i!=j)):
-					if(adjMatrix[j][i]!=1):
-						print 'Nao eh simetrica'
+			for j in range(len(self.adjMatrix)):
+				if((self.adjMatrix[i][j]==1) and (i!=j)):
 					#cost for keeping connected with the controller in j
-					weight = costList[i]*sFreq[i]*energy[i][j]\
-						+costList[j]*(Eproc+sFreq[i]*energy[j][i])
-					n.addEdge(edge(latencyMatrix[i][j],weight,j))
+					weight = self.costList[i]*self.sFreq[i]*self.energy[i][j]\
+						+self.costList[j]*(Eproc+self.sFreq[i]*self.energy[j][i])
+					n.addEdge(edge(self.latencyMatrix[i][j],weight,j))
 			
 			self.nodeList.append(n)
 	
