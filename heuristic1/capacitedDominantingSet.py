@@ -66,7 +66,6 @@ def mostEfficientNode(g,domSet,notDom):
 	return bestNode,maxIndex
 
 def solve(g):
-	g.makeSandBox()
 	g.sortEdgesByDemand()
 	
 	notDom = [i for i in range(len(g.nodeList))] #undominated vertices
@@ -84,6 +83,7 @@ def solve(g):
 		if domSet[u]==0:
 			assign[u][u] = 1
 			domSet[u]=1
+			#it must fullfil its own demand
 			g.nodeList[u].capacity = g.nodeList[u].capacity\
 				-g.nodeList[u].demand
 			#for each neighbor
@@ -125,7 +125,7 @@ def solve(g):
 					#remove n from the adjacency list of e
 					g.nodeList[e.toNode].neighborhood_sandbox = [\
 						x for x in g.nodeList[e.toNode].neighborhood_sandbox\
-							if x.toNode!=n]
+						if x.toNode!=n]
 			else:
 				print 'Error: '+str(n)+' is not in '+str(notDom)
 		

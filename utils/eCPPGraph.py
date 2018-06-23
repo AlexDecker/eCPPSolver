@@ -9,13 +9,17 @@ class edge:
 	#expected RTT for a Request+Response, considering the processing time and
 	#the propagation time
 	#-weight: the energy spent with requst+responses between those two nodes
+	#-fromNode: id of the node from which the edge comes (only in order to make
+	#this class independent)
 	#-toNode: id of the node to which the edge goes
 	
 	
-	def __init__(self,latency,weight,toNode):
+	def __init__(self,latency,weight,fromNode,toNode):
 		self.latency = latency
 		self.weight = weight
+		self.fromNode = fromNode
 		self.toNode = toNode
+		self.returnEdge = None
 	
 	def printEdge(self):
 		print '\t\t(Edge to #'+str(self.toNode)+') Latency: '+str(self.latency)+\
@@ -58,7 +62,7 @@ class node:
 class graph:
 	#this class has both matricial and graph representations. Each representation
 	#is useful for some reason in terms of efficiency
-	def __init__(self,filename,nSamples=10):
+	def __init__(self,filename,nSamplesFreq=10,nSamplesLat=10):
 		self.nodeList = []
 		#read file and get/generate the parameters
 		inst = inputParser.eCPPInstance(filename)
@@ -71,10 +75,10 @@ class graph:
 		
 		if(self.cFreq==-1):
 			self.cFreq = inGen.genCFreq(self.adjMatrix,self.sFreq,\
-				nSamples)
+				nSamplesFreq)
 		if(self.maxTotalLatency==-1):
 			self.maxTotalLatency = inGen.genMaxTotalLatency(self.adjMatrix,\
-				self.latencyMatrix, nSamples)
+				self.latencyMatrix, nSamplesLat)
 		
 		warning=False
 		for i in range(len(self.adjMatrix)):
@@ -100,9 +104,11 @@ class graph:
 					#cost for keeping connected with the controller in j
 					weight = self.costList[i]*self.sFreq[i]*self.energy[i][j]\
 						+self.costList[j]*(Eproc+self.sFreq[i]*self.energy[j][i])
-					n.addEdge(edge(self.latencyMatrix[i][j],weight,j))
+					n.addEdge(edge(self.latencyMatrix[i][j],weight,i,j))
 			
 			self.nodeList.append(n)
+		
+		self._fillReturnEdges()
 	
 	def printOriginalGraph(self):
 		print 'printing the original graph for this instance...\n'
@@ -124,3 +130,11 @@ class graph:
 		for n in self.nodeList:
 			n.neighborhood_sandbox.sort(key=lambda e:self.nodeList[e.toNode].demand,\
 				reverse = True) 
+	
+	#put a reference to (i,j) in every (j,i)
+	def _fillReturnEdges(self):
+		for n in self.nodeList:
+			for e1 in n._neighborhood:
+				for e2 in self.nodeList[e1.toNode]._neighborhood:
+					if e2.toNode == e1.fromNode:
+						e1.returnEdge = e2
