@@ -73,6 +73,7 @@ class graph:
 		self.sProcEnergy, self.cProcEnergy = inst.getProcEnergy()
 		self.cPower, self.sPower = inst.getStaticPower()
 		
+		#set auto generated values
 		if(self.cFreq==-1):
 			self.cFreq = inGen.genCFreq(self.adjMatrix,self.sFreq,\
 				nSamplesFreq)
