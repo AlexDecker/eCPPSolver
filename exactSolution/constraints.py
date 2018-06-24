@@ -1,4 +1,5 @@
 def generateConnectivityConstraints(adjMatrix):
+	ret = ''
 	#for each switch
 	for i in range(len(adjMatrix)):
 		s='\tConnectivityConstr'+str(i)+':'
@@ -15,9 +16,11 @@ def generateConnectivityConstraints(adjMatrix):
 				#its coordinates
 				s = s+' 1 e'+str(i)+'_'+str(j)+' '	
 		#each switch connects itself to only one controller
-		print (s+'= 1')
+		ret = ret + s + '= 1\n'
+	return ret
 
 def generateOverchargeConstraints(adjMatrix,sf,cf):
+	ret = ''
 	#for each controller
 	for j in range(len(adjMatrix)):
 		s='\tOverchargeConstr'+str(j)+':'
@@ -31,7 +34,8 @@ def generateOverchargeConstraints(adjMatrix,sf,cf):
 					s = s+'+'
 				s = s+' '+str(sf[i])+' e'+str(i)+'_'+str(j)+' '
 		#the sum of the requests' rates cannot exceed controller's limit
-		print (s+'<= '+str(cf))
+		ret = ret + s + '<= ' + str(cf) + '\n'
+	return ret
 
 def generateLatencyConstraint(adjMatrix,latencyMatrix,maxTotalLatency):
 	first = True
@@ -50,10 +54,11 @@ def generateLatencyConstraint(adjMatrix,latencyMatrix,maxTotalLatency):
 				#its coordinates
 				s = s+' '+str(latencyMatrix[i][j])+' e'+str(i)+'_'+str(j)+' '	
 	#the worst case total latency must not exceed a value
-	print (s+'<= '+str(maxTotalLatency))
+	return (s + '<= ' + str(maxTotalLatency) + '\n')
 
 #couple the connection variables and the placement variables
 def generateCouplingConstraints(adjMatrix):
+	ret = ''
 	#for each controller
 	for j in range(len(adjMatrix)):
 		s='\tCouplingConstr'+str(j)+':'
@@ -69,11 +74,13 @@ def generateCouplingConstraints(adjMatrix):
 		#if p_j is zero, there is no controller at this location, so
 		#no connection is allowed. Otherwise, the maximum number of
 		#connections is one for each switch
-		print (s+'- '+str(len(adjMatrix))+' p'+str(j)+' <= 0')
+		ret = ret + s + '- ' + str(len(adjMatrix)) + ' p' + str(j) + ' <= 0\n'
+	return ret
 
 def generateConstraints(adjMatrix,sfreq,cfreq,latencyMatrix,maxTotalLatency):
-	print 'Subject to'
-	generateConnectivityConstraints(adjMatrix)
-	generateOverchargeConstraints(adjMatrix,sfreq,cfreq)
-	generateLatencyConstraint(adjMatrix,latencyMatrix,maxTotalLatency)
-	generateCouplingConstraints(adjMatrix)
+	ret = 'Subject to\n'
+	ret = ret + generateConnectivityConstraints(adjMatrix)
+	ret = ret + generateOverchargeConstraints(adjMatrix,sfreq,cfreq)
+	ret = ret + generateLatencyConstraint(adjMatrix,latencyMatrix,maxTotalLatency)
+	ret = ret + generateCouplingConstraints(adjMatrix)
+	return ret

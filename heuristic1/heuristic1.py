@@ -49,9 +49,10 @@ def run(g):
 			break
 	return value, feasible
 
-def test(nSFreq, nSLat):
+def test(file = '../testScripts/autoGen.xml', nSFreq = 10,\
+	nSLat = 10):
 	while True:
-		g = eCPPGraph.graph('../testScripts/autoGen.xml',\
+		g = eCPPGraph.graph(file,\
 			nSamplesFreq=nSFreq,nSamplesLat=nSLat)
 		value,feasible = run(g)
 		if feasible:
