@@ -22,22 +22,28 @@ def efficiency(g,node,domSet):
 	for e in g.nodeList[node].neighborhood_sandbox:
 		if domSet[node]==0:
 			x = g.nodeList[node].demand #it must include its own demand
+			#cost for just keeping the controller here (without 
+			#constant_costs)
+			cost = g.nodeList[node].weight 
+			#flag that the switch of this location will also be included
 			me = 1
 		else:
 			x = 0 #its demant yet have been included
+			cost = 0
 			me = 0
 		
 		for j in range(i):
 			x = x + g.nodeList[\
 				g.nodeList[node].neighborhood_sandbox[j].toNode\
 				].demand
+			cost = cost + g.nodeList[node].neighborhood_sandbox[j].weight
 		
 		#if the assingnment is feasible
 		if x<=g.nodeList[node].capacity:
-			if (x==0) or (g.nodeList[node].weight==0):
+			if (x==0) or (cost==0):
 				ratio = float('inf') #the ratio becames naturally inf
 			else:
-				ratio = (me+i)/g.nodeList[node].weight
+				ratio = (me+i)/cost
 			if ratio>maxRatio:#selects the best ration seen so far
 				maxRatio = ratio
 				maxIndex = i
