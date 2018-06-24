@@ -5,11 +5,11 @@ import eCPPGraph
 import capacitedDominantingSet
 import evaluateSolution
 
-def run(g):
+def run(graph):
 	#if all bad edges (whose latency is more than this threshold)
 	#were removed, the solution is certainly feasible
-	if len(g.nodeList)>1:
-		threshold = g.maxTotalLatency/(len(g.nodeList)-1)
+	if len(graph.nodeList)>1:
+		threshold = graph.maxTotalLatency/(len(graph.nodeList)-1)
 	else:
 		#there is no edge, so this value is irrelevant
 		threshold = 0
@@ -17,21 +17,24 @@ def run(g):
 	#lists of edges from eCPPGraph
 	blackList = []
 	badEdgeList = []
-	for n in g.nodeList:
+	for n in graph.nodeList:
 		for e in n._neighborhood:
 			if e.latency>threshold:
 				badEdgeList.append(e)	
 
 	while True:
 		#prepare the new subgraph for execution
-		g.makeSandBox()
+		graph.makeSandBox()
 		#eliminate some bad edges
 		for e in blackList:
-			g.nodeList[e.fromNode].neighborhood_sandbox.remove(e)
-			g.nodeList[e.toNode].neighborhood_sandbox.remove(e.returnEdge)
+			graph.nodeList[e.fromNode].neighborhood_sandbox.remove(e)
+			graph.nodeList[e.toNode].neighborhood_sandbox.remove(\
+				e.returnEdge)
 		
-		s,a = capacitedDominantingSet.solve(g)
-		value,feasible = evaluateSolution.eval(s,a,g)
+		placementVector,assingMatrix = capacitedDominantingSet.solve(\
+			graph)
+		value,feasible = evaluateSolution.eval(placementVector,\
+			assingMatrix,graph)
 		if not feasible:
 			#assume it is bacause of the latency constraint
 			if badEdgeList!=[]:
@@ -47,14 +50,15 @@ def run(g):
 				return value, False
 		else:
 			break
-	return value, feasible
+	return value, feasible, placementVector, assingMatrix
 
 def test(file = '../testScripts/autoGen.xml', nSFreq = 10,\
 	nSLat = 10):
 	while True:
 		g = eCPPGraph.graph(file,\
 			nSamplesFreq=nSFreq,nSamplesLat=nSLat)
-		value,feasible = run(g)
+		
+		value,feasible,_,_ = run(g)
 		if feasible:
 			print value
 		else:
