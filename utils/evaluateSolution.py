@@ -7,31 +7,34 @@
 
 import eCPPGraph
 
-def eval(placementVector, connectionMatrix, graph):
+def eval(placementVector, connectionMatrix, graph, verbose=False):
 	f = evaluateFeasibility(placementVector, connectionMatrix,\
 		graph.adjMatrix,graph.latencyMatrix,\
-		graph.sFreq,graph.cFreq,graph.maxTotalLatency)
+		graph.sFreq,graph.cFreq,graph.maxTotalLatency,verbose)
 	v = evaluateValue(placementVector, connectionMatrix,\
 		graph.costList, graph.cPower, graph.sPower,\
 		graph.energy, graph.sProcEnergy, graph.cProcEnergy, graph.sFreq)
 	return v, f
 
 def evaluateFeasibility(placementVector, connectionMatrix, adjMatrix,\
-	latencyMatrix,sFreq,cFreq,maxTotalLatency):
+	latencyMatrix,sFreq,cFreq,maxTotalLatency,verbose):
 	for i in range(len(placementVector)):
 		connections = 0
 		for j in range(len(placementVector)):
 			if(connectionMatrix[i][j]==1):
 				if(adjMatrix[i][j]==0):
-					print 'Invalid: Inexistent Link'
+					if verbose:
+						print 'Invalid: Inexistent Link'
 					return False #the link does not exist
 				if(placementVector[j]!=1):
-					print 'Invalid: Coupling Constraint'
+					if verbose:
+						print 'Invalid: Coupling Constraint'
 					return False #it is connected to a controller that
 					#does not exist
 				connections = connections+1
 		if(connections!=1):
-			print 'Invalid: Connectivity Constraint'
+			if verbose:
+				print 'Invalid: Connectivity Constraint'
 			return False #each switch has one connection with a
 			#controller
 	totalLatency = 0
@@ -42,10 +45,12 @@ def evaluateFeasibility(placementVector, connectionMatrix, adjMatrix,\
 				totalLatency = totalLatency + latencyMatrix[i][j]
 				charge = charge+sFreq[i]
 		if(charge>cFreq):
-			print 'Invalid: Overcharge Constraint'
+			if verbose:
+				print 'Invalid: Overcharge Constraint'
 			return False
 		if(totalLatency>maxTotalLatency):
-			print 'Invalid: Latency Constraint'
+			if verbose:
+				print 'Invalid: Latency Constraint'
 			return False
 	return True
 
