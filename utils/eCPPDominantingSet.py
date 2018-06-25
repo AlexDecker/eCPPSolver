@@ -25,12 +25,9 @@ def efficiency(g,node,domSet):
 			#cost for just keeping the controller here (without 
 			#constant_costs)
 			cost = g.nodeList[node].weight 
-			#flag that the switch of this location will also be included
-			me = 1
 		else:
 			x = 0 #its demant yet have been included
 			cost = 0
-			me = 0
 		
 		for j in range(i):
 			x = x + g.nodeList[\
@@ -43,7 +40,7 @@ def efficiency(g,node,domSet):
 			if (x==0) or (cost==0):
 				ratio = float('inf') #the ratio becames naturally inf
 			else:
-				ratio = (me+i)/cost
+				ratio = x/cost
 			if ratio>maxRatio:#selects the best ration seen so far
 				maxRatio = ratio
 				maxIndex = i

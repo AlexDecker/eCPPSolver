@@ -9,8 +9,8 @@ def gen(filename='generatedInput.xml',\
     minSwitchPacketProcessingTime = 0.0005,\
     maxSwitchPacketProcessingTime =  0.001,\
 	minEnergyPerBitPerKm = 0.00001, maxEnergyPerBitPerKm = 0.0001,\
-	avgMsgSize = 128, minSwitchRequestFrequency = 100,\
-	maxSwitchRequestFrequency = 200,\
+	avgMsgSize = 12000, minSwitchRequestFrequency = 416667,\
+	maxSwitchRequestFrequency = 833333,\
 	minCost = 0.0007, maxCost = 0.0017,\
 	minControllerStaticPower = 400, maxControllerStaticPower = 600,\
 	minControllerPacketProcessingEnergy = 0.005,\

@@ -63,7 +63,7 @@ def evaluateValue(placementVector, connectionMatrix, costList, cPower, sPower,\
 		tCost = tCost+costList[j]*sPower[j]#switch
 		if(placementVector[j]==1):
 			tCost = tCost+costList[j]*cPower#controller
-	
+	x = tCost
 	#(cost due request processing)
 	#for each switch
 	for i in range(len(placementVector)):
@@ -80,4 +80,6 @@ def evaluateValue(placementVector, connectionMatrix, costList, cPower, sPower,\
 				#total cost for the link i,j within 1 s
 				tCost = tCost+(sEnergy*costList[i]\
 					+ cEnergy*costList[j])*sFreq[i]
+	if tCost!=0:
+		print ('How much is spent with static costs: '+str(100*x/tCost)+'%')
 	return tCost
