@@ -2,27 +2,25 @@
 
 import sys
 
-sys.path.insert(0,'../exactSolution')
-import exactSolution
+sys.path.insert(0,'..')
+import generateXMLInput
 
-sys.path.insert(0,'../heuristic1')
-import heuristic1
-
-sys.path.insert(0,'../heuristic2')
-import heuristic2
-
-sys.path.insert(0,'../heuristic3')
-import heuristic3
-
-sys.path.insert(0,'../utils')
+sys.path.insert(0,'../../utils')
 import eCPPGraph
 
-def generateInput():
-	
+sys.path.insert(0,'../../exactSolution')
+import exactSolution
 
-generatedInput = generateInput(
+sys.path.insert(0,'../../heuristic1')
+import heuristic1
 
+sys.path.insert(0,'../../heuristic2')
+import heuristic2
 
+sys.path.insert(0,'../../heuristic3')
+import heuristic3
+
+generateXMLInput.gen()
 
 graph = eCPPGraph.graph('generatedInput.xml')
 

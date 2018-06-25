@@ -15,6 +15,7 @@ def gen(filename='generatedInput.xml',\
 	minControllerStaticPower = 400, maxControllerStaticPower = 600,\
 	minControllerPacketProcessingEnergy = 0.005,\
 	maxControllerPacketProcessingEnergy = 0.007,\
+	minSwitchStaticPower = 200, maxSwitchStaticPower = 300,\
 	minSwitchPacketProcessingEnergy = 0.001,\
 	maxSwitchPacketProcessingEnergy = 0.003):
 	
@@ -49,6 +50,8 @@ def gen(filename='generatedInput.xml',\
 		    maxControllerStaticPower = "'+str(maxControllerStaticPower)+'"\n\
 		    minControllerPacketProcessingEnergy = "'+str(minControllerPacketProcessingEnergy)+'"\n\
 		    maxControllerPacketProcessingEnergy = "'+str(maxControllerPacketProcessingEnergy)+'"\n\
+		    minSwitchStaticPower = "'+str(minSwitchStaticPower)+'"\n\
+			maxSwitchStaticPower = "'+str(maxSwitchStaticPower)+'"\n\
 		    minSwitchPacketProcessingEnergy = "'+str(minSwitchPacketProcessingEnergy)+'"\n\
 		    maxSwitchPacketProcessingEnergy = "'+str(maxSwitchPacketProcessingEnergy)+'"\n\
 			></settings>')

@@ -1,5 +1,7 @@
-#(tested with GLPK )
-import os
+#(tested with GLPK 4.35)
+import subprocess
+from threading import Timer
+
 import lpGenerator
 
 import sys
@@ -8,8 +10,15 @@ sys.path.insert(0,'../utils')
 import eCPPGraph
 import evaluateSolution
 
+def kill(process):
+	global timeLimitExceed
+	process.kill()
+	timeLimitExceed = True
 
-def run(graph):
+def run(graph,timeout=600):
+	global timeLimitExceed
+	timeLimitExceed = False
+	
 	placementVector = [0 for n in graph.nodeList]
 	assignMatrix = [[0 for n in graph.nodeList]\
 		for n in graph.nodeList]
@@ -22,8 +31,22 @@ def run(graph):
 		myfile.write(lp)
 		myfile.close()
 	
-	#call glpsol synchronously
-	os.popen('glpsol --cpxlp eCPPInput.lp -o outputGLPK.txt >/dev/null')
+	#call glpsol assynchronously
+	cmd  = 'glpsol --cpxlp eCPPInput.lp -o outputGLPK.txt >/dev/null'
+	glpk = subprocess.Popen(cmd,shell=True)
+	#set a timer to kill the procees if it takes more than timeout to end
+	t	 = Timer(timeout,kill,[glpk])
+	
+	try:
+		t.start()
+		stdout,strerr = glpk.communicate()
+	finally:
+		t.cancel()
+	
+	#if the process was kild
+	if timeLimitExceed:
+		print 'Time Limit Exceed'
+		return float('inf'), None, placementVector, assignMatrix
 	
 	#read the variables (using a different version of GLPK may break this part)
 	feasible = False
