@@ -48,9 +48,9 @@ def evaluateFeasibility(placementVector, connectionMatrix, adjMatrix,\
 			if verbose:
 				print 'Invalid: Overcharge Constraint'
 			return False
-		if(totalLatency>maxTotalLatency):
+		if(totalLatency>maxTotalLatency+0.00000001):
 			if verbose:
-				print 'Invalid: Latency Constraint'
+				print 'Invalid: Latency Constraint: '+str(totalLatency)+', '+str(maxTotalLatency)
 			return False
 	return True
 

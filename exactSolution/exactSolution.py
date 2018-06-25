@@ -32,7 +32,7 @@ def run(graph,timeout=600):
 		myfile.close()
 	
 	#call glpsol assynchronously
-	cmd  = 'glpsol --cpxlp eCPPInput.lp -o outputGLPK.txt >/dev/null'
+	cmd  = 'glpsol --cpxlp eCPPInput.lp --mipgap 0 -o outputGLPK.txt >/dev/null'
 	glpk = subprocess.Popen(cmd,shell=True)
 	#set a timer to kill the procees if it takes more than timeout to end
 	t	 = Timer(timeout,kill,[glpk])
@@ -71,7 +71,7 @@ def run(graph,timeout=600):
 	
 	if feasible:
 		value,feasible = evaluateSolution.eval(placementVector,\
-			assignMatrix, graph)
+			assignMatrix, graph, verbose=False)
 	else:
 		value = float('inf')
 		feasible = False

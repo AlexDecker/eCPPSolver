@@ -34,7 +34,7 @@ def run(graph):
 		placementVector,assignMatrix = eCPPDominantingSet.solve(\
 			graph)
 		value,feasible = evaluateSolution.eval(placementVector,\
-			assignMatrix,graph)
+			assignMatrix,graph,verbose=False)
 		if not feasible:
 			#assume it is bacause of the latency constraint
 			if badEdgeList!=[]:
@@ -47,7 +47,7 @@ def run(graph):
 				blackList.append(e)
 			else:
 				print 'Something went wrong'
-				return value, False
+				return value, False, placementVector, assignMatrix
 		else:
 			break
 	return value, feasible, placementVector, assignMatrix

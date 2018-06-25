@@ -2,3 +2,5 @@
 *.lp
 *.swp
 *.txt
+testScripts/tests/generatedInput.xml
+*.log
