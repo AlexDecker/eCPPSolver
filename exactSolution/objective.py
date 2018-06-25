@@ -49,4 +49,4 @@ def VarCost(costList,adjMatrix,energy,cProcEnergy,sFreq):
 
 def generateObjective(costList,cPower,adjMatrix,energy,cProcEnergy,sFreq):
 	return('Minimize\n\tobj: '+cConstCost(costList,cPower)+VarCost(\
-		costList,adjMatrix,energy,cProcEnergy,sFreq))
+		costList,adjMatrix,energy,cProcEnergy,sFreq)+'\n')

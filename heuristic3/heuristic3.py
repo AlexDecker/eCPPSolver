@@ -31,10 +31,10 @@ def run(graph):
 			graph.nodeList[e.toNode].neighborhood_sandbox.remove(\
 				e.returnEdge)
 		
-		placementVector,assingMatrix = eCPPDominantingSet.solve(\
+		placementVector,assignMatrix = eCPPDominantingSet.solve(\
 			graph)
 		value,feasible = evaluateSolution.eval(placementVector,\
-			assingMatrix,graph)
+			assignMatrix,graph)
 		if not feasible:
 			#assume it is bacause of the latency constraint
 			if badEdgeList!=[]:
@@ -51,7 +51,7 @@ def run(graph):
 				return value, False
 		else:
 			break
-	return value, feasible, placementVector, assingMatrix
+	return value, feasible, placementVector, assignMatrix
 
 def test(file = '../testScripts/autoGen.xml', nSFreq = 10,\
 	nSLat = 10):
