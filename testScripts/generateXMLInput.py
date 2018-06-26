@@ -1,3 +1,4 @@
+#(antes estava minEnergyPerBitPerKm = 0.00001, maxEnergyPerBitPerKm = 0.0001,\)
 #generates a XML file for eCPPGraph
 def gen(filename='generatedInput.xml',\
 	nNodes = 13, edgeDivisor=1,\
@@ -8,9 +9,10 @@ def gen(filename='generatedInput.xml',\
 	maxControllerPacketProcessingTime = 0.003,\
     minSwitchPacketProcessingTime = 0.0005,\
     maxSwitchPacketProcessingTime =  0.001,\
-	minEnergyPerBitPerKm = 0.00001, maxEnergyPerBitPerKm = 0.0001,\
+	minEnergyPerBitPerKm = 0.00001, maxEnergyPerBitPerKm = 0.00001,\
 	avgMsgSize = 12000, minSwitchRequestFrequency = 416667,\
 	maxSwitchRequestFrequency = 833333,\
+	controllerResponseFrequency=-1,\
 	minCost = 0.0007, maxCost = 0.0017,\
 	minControllerStaticPower = 400, maxControllerStaticPower = 600,\
 	minControllerPacketProcessingEnergy = 0.005,\
@@ -44,6 +46,7 @@ def gen(filename='generatedInput.xml',\
 		    avgMsgSize = "'+str(avgMsgSize)+'"\n\
 		    minSwitchRequestFrequency = "'+str(minSwitchRequestFrequency)+'"\n\
 		    maxSwitchRequestFrequency = "'+str(maxSwitchRequestFrequency)+'"\n\
+		    controllerResponseFrequency = "'+str(controllerResponseFrequency)+'"\n\
 		    minCost = "'+str(minCost)+'"\n\
 		    maxCost = "'+str(maxCost)+'"\n\
 		    minControllerStaticPower = "'+str(minControllerStaticPower)+'"\n\

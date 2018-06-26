@@ -58,6 +58,8 @@ class eCPPInstance:
 			self.minSFreq = float(config[0].attributes['minSwitchRequestFrequency'].value)
 			self.maxSFreq = float(config[0].attributes['maxSwitchRequestFrequency'].value)
 			
+			self.cfreq = float(config[0].attributes['controllerResponseFrequency'].value)
+			
 			self.minCost = float(config[0].attributes['minCost'].value)
 			self.maxCost = float(config[0].attributes['maxCost'].value)
 			
@@ -163,7 +165,7 @@ class eCPPInstance:
 	#cfreq with the maximum response frequency of the controller
 	def getFrequencies(self):
 		if(self.autoGen):
-			cfreq = -1
+			cfreq = self.cfreq
 			sfreq = [random.uniform(self.minSFreq,self.maxSFreq)\
 				for i in range(self.nNodes)]
 		else:

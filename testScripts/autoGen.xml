@@ -17,6 +17,7 @@
 	avgMsgSize = "128"
 	minSwitchRequestFrequency = "100"
 	maxSwitchRequestFrequency = "200"
+	controllerResponseFrequency = "-1"
 	minCost = "0.0007"
 	maxCost = "0.0017"
 	minControllerStaticPower = "400"
