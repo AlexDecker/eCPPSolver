@@ -2,11 +2,90 @@
 #include "ns3/network-module.h"
 #include "ns3/internet-module.h"
 #include "ns3/point-to-point-module.h"
-#include <iostream>
 
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE ("simulacaoSBRC");
+
+typedef struct{
+	//para a contagem da energia gasta
+	double joulesPerBit;
+	double propagationTime;
+	//nó cuja interface de rede (deste link) é identificado pelo final 1
+	Ptr<Node> node1;
+	//nó cuja interface de rede (deste link) é identificado pelo final 2
+	Ptr<Node> node2;
+	Ptr<Socket> socket;
+}ControlLink;
+
+class Controller{
+	public:
+		//vetor de [degree] posições
+		ControlLink* controlPlaneLinks;
+		//vetor de [degree+1] posições (o último liga o controlador e o
+		//router da mesma localidade)
+		ControlLink* southboundLinks;
+		
+		Controller(double _capacity, double _responseProbability,
+			double _processingEnergy, double _energyPrice, uint32_t _responseSize,
+			int degree);
+		~Controller();
+		//insere tanto o southbound link quanto o controlPlaneLink
+		//correspondente à aresta real
+		void addEdge();
+		//prepara e envia a resposta e calcula a energia gasta
+		void requestHandler();
+	private:
+		double capacity;//requests por segundo
+		double responseProbability;//probabilidade de um request gerar um respose
+		double processingEnergy;//joules/request+response
+		double energyPrice;//dolares/joule
+		uint32_t responseSize;//tamanho da resposta em bytes
+		//envia a resposta e calcula a energia gasta
+		double sendResponse();
+};
+
+class Router{
+	public:
+		ControlLink parent;
+		//vetor de [degree+1] posições (o último liga o controlador e o
+		//router da mesma localidade)
+		ControlLink* southboundLinks;
+		
+		Router(double _traffic, double _requestProbabilty, double _energyPrice,
+			uint32_t _requestSize, int _degree);
+		~Router();
+		//insere um southbound link
+		void addEdge();
+		//contabiliza a energia gasta com o recebimento, processamento e eventual
+		//transmissão de uma mensagem, além da transmissão de uma eventual solicitação
+		//ao controlador
+		void messageHandler();
+		//contabiliza a energia gasta pelo recebimento e processamento da resposta e a
+		//transmissão da mensagem
+		void responseHandler();
+	private:
+		double traffic;//mensagens/s
+		double requestProbabilty;//probabilidade de uma mensagem gerar um request
+		double energyPrice;//dolares/joule
+		uint32_t requestSize;//tamanho do request em bytes
+};
+
+
+class Wan{
+	ControlLink* controlPlaneLinks;
+	ControlLink* southBoundLinks;
+	public:
+		//vetores de [nLocations] posições
+		Controller* controllers;
+		Router* routers;
+		
+		Wan(int nControlPlaneLinks, int nSouthBoundLinks, int nLocations);
+		int  addController();
+		void addLink(double joulesPerBit, double propagationTime, int node1, int node2);
+		Ptr<Socket> getSocket(InetSocketAddress iaddr);
+		Ptr<Node> getNode(InetSocketAddress iaddr);
+};
 
 Ptr<Socket> s_controlador1;//gambs momentânea. Usar uma estrutura com todos os sockets
 //e selecionar pelo segundo campo do ip. Para isso, usar Serialize() e pegar buff[2]
@@ -62,6 +141,13 @@ static void GenerateTraffic (Ptr<Socket>* socket, uint32_t pktSize,
 }
 
 int main(int argc, char** argv){
+	Wan wan = Wan(0,0,10);
+	wan.addController();
+	Controller ctrl = Controller(0,0,0,0,0,3);
+	ctrl.addEdge();
+	Router rtr = Router(0, 0, 0, 0, 3);
+	rtr.addEdge();
+	
 	CommandLine cmd;
 	cmd.Parse (argc, argv);
 	
@@ -147,4 +233,80 @@ int main(int argc, char** argv){
 	Simulator::Run();
 	Simulator::Destroy ();
 	return 0;
+}
+
+Controller::Controller(double _capacity, double _responseProbability, double _processingEnergy,
+	double _energyPrice, uint32_t _responseSize, int degree){
+	capacity = _capacity;//requests por segundo
+	responseProbability = _responseProbability;//probabilidade de um request gerar um respose
+	processingEnergy = _processingEnergy;
+	energyPrice = _energyPrice;//dolares/joule
+	responseSize = _responseSize;//tamanho da resposta em bytes
+	
+	controlPlaneLinks = (ControlLink*) malloc(sizeof(ControlLink)*degree);
+	southboundLinks = (ControlLink*) malloc(sizeof(ControlLink)*(degree+1));
+}
+
+Controller::~Controller(){
+	free(controlPlaneLinks);
+	free(southboundLinks);
+}
+
+//insere tanto o southbound link quanto o controlPlaneLink
+//correspondente à aresta real
+void Controller::addEdge(){
+}
+
+//prepara e envia a resposta e calcula a energia gasta
+void Controller::requestHandler(){
+}
+
+//envia a resposta e calcula a energia gasta
+double Controller::sendResponse(){
+	return 0.0;
+}
+
+Router::Router(double _traffic, double _requestProbabilty, double _energyPrice, 
+	uint32_t _requestSize, int degree){
+	traffic = _traffic;//mensagens/s
+	requestProbabilty = _requestProbabilty;//probabilidade de uma mensagem gerar um request
+	energyPrice = _energyPrice;//dolares/joule
+	requestSize = _requestSize;//tamanho do request em bytes
+	
+	southboundLinks = (ControlLink*) malloc(sizeof(ControlLink)*(degree+1));
+}
+
+Router::~Router(){
+	free(southboundLinks);
+}
+
+//insere um southbound link
+void Router::addEdge(){
+}
+
+//contabiliza a energia gasta com o recebimento, processamento e eventual
+//transmissão de uma mensagem, além da transmissão de uma eventual solicitação ao controlador
+void Router::messageHandler(){
+}
+
+//contabiliza a energia gasta pelo recebimento e processamento da resposta e a transmissão da mensagem
+void Router::responseHandler(){
+}
+
+Wan::Wan(int nControlPlaneLinks, int nSouthBoundLinks, int nLocations){}
+
+int  Wan::addController(){
+	return 0;
+}
+
+void Wan::addLink(double joulesPerBit, double propagationTime, int node1,
+	int node2){
+}
+
+Ptr<Socket> Wan::getSocket(InetSocketAddress iaddr){
+	return NULL;
+}
+
+Ptr<Node> Wan::getNode(InetSocketAddress iaddr){
+	return NULL;
 }
