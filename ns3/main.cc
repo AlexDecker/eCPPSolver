@@ -3,6 +3,7 @@
 #include "ns3/internet-module.h"
 #include "ns3/point-to-point-module.h"
 
+#include <stdio.h>
 /*
  * Endereçamento: 10.X.Y.Z
  * X: 0 (link de plano de controle) ou 1 (link da interface southbound)
@@ -93,8 +94,8 @@ class Wan{
 		Controller* controllers;
 		Router* routers;
 		
-		Wan(int nControlPlaneLinks, int nsouthBoundLinks, int nLocations);
-		int addController();
+		Wan(int nCPLinks, int nLocations);
+		int addLocation(Controller ctrl, Router rtr);
 		int addRouter();
 		void installIpv4();
 		void addLink(double joulesPerBit, double propagationTime, int node1,
@@ -164,13 +165,6 @@ static void GenerateTraffic (Ptr<Socket>* socket, uint32_t pktSize,
 }
 
 int main(int argc, char** argv){
-	Wan wan = Wan(0,0,10);
-	wan.addController();
-	Controller ctrl = Controller(0,0,0,0,0,3);
-	ctrl.addEdge();
-	Router rtr = Router(0, 0, 0, 0, 3);
-	rtr.addEdge();
-	
 	CommandLine cmd;
 	cmd.Parse (argc, argv);
 	
@@ -285,7 +279,7 @@ void Controller::addLink(ControlLink link){
 	//obtem um dos sockets
 	Ptr<Socket> socket = link.sockets[0];
 	//obtem o endereço associado
-	Ipv4Address addr = socket->GetObject<Ipv4>()->GetAddress(1,0).GetLocal()
+	Ipv4Address addr = socket->GetObject<Ipv4>()->GetAddress(1,0).GetLocal();
 	//separa os bytes
 	addr.Serialize(buffer);
 	//verifica a natureza do link
@@ -325,13 +319,13 @@ Router::~Router(){
 }
 
 //insere um southbound link
-void Router::addEdge(ControlLink link){
+void Router::addLink(ControlLink link){
 	//separa os bytes do endereço de ipv4
 	uint8_t buffer[4];
 	//obtem um dos sockets
 	Ptr<Socket> socket = link.sockets[0];
 	//obtem o endereço associado
-	Ipv4Address addr = socket->GetObject<Ipv4>()->GetAddress(1,0).GetLocal()
+	Ipv4Address addr = socket->GetObject<Ipv4>()->GetAddress(1,0).GetLocal();
 	//separa os bytes
 	addr.Serialize(buffer);
 	//verifica a natureza do link
@@ -365,8 +359,8 @@ Wan::Wan(int nCPLinks, int nLocations){
 
 int  Wan::addLocation(Controller ctrl, Router rtr){
 	//registrando os nós novos no container global da rede
-	nodes.add(ctrl.node);
-	nodes.add(rtr.node);
+	nodes.Add(ctrl.node);
+	nodes.Add(rtr.node);
 	//inserindo os objetos nos vetores correspondentes
 	controllers[nLoc] = ctrl;
 	routers[nLoc] = rtr;
@@ -395,9 +389,11 @@ int Wan::addSouthBoundLink(double joulesPerBit, double propagationTime,
 	link.nodes[0] = controllers[controller].node;
 	link.nodes[1] = routers[router].node;
 	//configurando conexão ponto a ponto
+	char ptime[50];
+	sprintf(ptime,"%fms",propagationTime);
 	PointToPointHelper pointToPoint;
 	pointToPoint.SetDeviceAttribute("DataRate", StringValue("5Mbps"));
-	pointToPoint.SetChannelAttribute("Delay", StringValue(propagationTime<<"ms"));
+	pointToPoint.SetChannelAttribute("Delay", StringValue(ptime));
 	//definindo endpoints
 	NetDeviceContainer nDev = pointToPoint.Install(NodeContainer(
 		controllers[controller].node,
@@ -405,7 +401,9 @@ int Wan::addSouthBoundLink(double joulesPerBit, double propagationTime,
 	
 	//atribuindo endereços
 	Ipv4AddressHelper ipv4;
-	ipv4.SetBase("10.1."<<nSBLinks<<".0", "255.255.255.0");
+	char addr[50];
+	sprintf(addr,"10.1.%d.0", nSBLinks);
+	ipv4.SetBase(addr, "255.255.255.0");
 	ipv4.Assign(nDev);
 	//criando sockets
 	TypeId tid = TypeId::LookupByName ("ns3::UdpSocketFactory");
@@ -431,13 +429,13 @@ int Wan::addSouthBoundLink(double joulesPerBit, double propagationTime,
 	//Inserindo o link na lista de Wan
 	southBoundLinks[nSBLinks] = link;
 	//Inserindo nas listas dos nós
-	link.nodes[0]->addLink(link);
-	link.nodes[1]->addLink(link);
+	controllers[controller].addLink(link);
+	routers[router].addLink(link);
 	
 	return nSBLinks++;
 }
 
-void Wan::addControlPlaneLink(double joulesPerBit, double propagationTime,
+int Wan::addControlPlaneLink(double joulesPerBit, double propagationTime,
 	int controller1, int controller2){
 	ControlLink link;
 	link.joulesPerBit = joulesPerBit;
@@ -445,9 +443,11 @@ void Wan::addControlPlaneLink(double joulesPerBit, double propagationTime,
 	link.nodes[0] = controllers[controller1].node;
 	link.nodes[1] = controllers[controller2].node;
 	//configurando conexão ponto a ponto
-	PointToPointHelper pointToPoint;
-	pointToPoint.SetDeviceAttribute("DataRate", StringValue("5Mbps"));
-	pointToPoint.SetChannelAttribute("Delay", StringValue(propagationTime<<"ms"));
+	char ptime[50];
+    sprintf(ptime ,"%fms", propagationTime);
+    PointToPointHelper pointToPoint;
+    pointToPoint.SetDeviceAttribute("DataRate", StringValue("5Mbps"));
+	pointToPoint.SetChannelAttribute("Delay", StringValue(ptime));
 	//definindo endpoints
 	NetDeviceContainer nDev = pointToPoint.Install(NodeContainer(
 		controllers[controller1].node,
@@ -455,7 +455,9 @@ void Wan::addControlPlaneLink(double joulesPerBit, double propagationTime,
 	
 	//atribuindo endereços
 	Ipv4AddressHelper ipv4;
-	ipv4.SetBase("10.0."<<nCPLinks<<".0", "255.255.255.0");
+	char addr[50];
+	sprintf(addr, "10.0.%d.0",nCPLinks);
+	ipv4.SetBase(addr, "255.255.255.0");
 	ipv4.Assign(nDev);
 	//criando sockets
 	TypeId tid = TypeId::LookupByName ("ns3::UdpSocketFactory");
@@ -470,10 +472,10 @@ void Wan::addControlPlaneLink(double joulesPerBit, double propagationTime,
 	link.sockets[1]->SetRecvCallback(MakeCallback(&ReceiveCPMessage));
 	
 	//Inserindo o link na lista de Wan
-	southBoundLinks[nCPLinks] = link;
+	controlPlaneLinks[nCPLinks] = link;
 	//Inserindo nas listas dos nós
-	link.nodes[0]->addLink(link);
-	link.nodes[1]->addLink(link);
+	controllers[controller1].addLink(link);
+	controllers[controller2].addLink(link);
 	
 	return nCPLinks++;
 }
