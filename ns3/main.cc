@@ -4,6 +4,9 @@
 #include "ns3/point-to-point-module.h"
 
 #include <stdio.h>
+#include <time.h>
+#include <vector>
+
 /*
  * Endereçamento: 10.X.Y.Z
  * X: 0 (link de plano de controle) ou 1 (link da interface southbound)
@@ -12,6 +15,7 @@
 */
 
 using namespace ns3;
+using std::vector;
 
 NS_LOG_COMPONENT_DEFINE ("simulacaoSBRC");
 
@@ -23,59 +27,64 @@ typedef struct{
 	Ptr<Node> nodes[2];
 	//sockets correspondentes aos nós supracitados (neste link)
 	Ptr<Socket> sockets[2];
+	//endereços de ip correspondentes aos nós supracitados (neste link)
+	Ipv4Address ipv4Addr[2];
+	//index dos nós nas listas correspondentes
+	int id[2];
 }ControlLink;
 
 class Controller{
 	public:
 		//vetor de [degree] posições
-		ControlLink* controlPlaneLinks;
+		vector<ControlLink> controlPlaneLinks;
 		//vetor de [degree+1] posições (o último liga o controlador e o
 		//router da mesma localidade)
-		ControlLink* southBoundLinks;
+		vector<ControlLink> southBoundLinks;
 		
 		Ptr<Node> node;
 		
 		Controller(double _capacity, double _responseProbability,
 			double _processingEnergy, double _energyPrice, uint32_t _responseSize,
 			int degree);
-		~Controller();
 		
 		void addLink(ControlLink link);
 		//prepara e envia a resposta e calcula a energia gasta
-		void requestHandler();
+		void requestHandler(Address from, Ptr<Packet> packet);
 	private:
 		double capacity;//requests por segundo
 		double responseProbability;//probabilidade de um request gerar um respose
 		double processingEnergy;//joules/request+response
 		double energyPrice;//dolares/joule
 		uint32_t responseSize;//tamanho da resposta em bytes
-		//envia a resposta e calcula a energia gasta
-		double sendResponse();
 };
 
 class Router{
 	public:
-		ControlLink parent;
+		int parent;
 		//vetor de [degree+1] posições (o último liga o controlador e o
 		//router da mesma localidade)
-		ControlLink* southBoundLinks;
+		vector<ControlLink> southBoundLinks;
 		
 		Ptr<Node> node;
 		
 		Router(double _traffic, double _requestProbabilty, double _energyPrice,
 			uint32_t _requestSize, int _degree);
-		~Router();
+		
 		//insere um southbound link
 		void addLink(ControlLink link);
+		
+		//interval é o intervalo dentro do qual essa função é chamada
+		void sendRequest(Time interval);
+		
 		//contabiliza a energia gasta com o recebimento, processamento e eventual
 		//transmissão de uma mensagem, além da transmissão de uma eventual
 		//solicitaçãoao controlador
-		void messageHandler();
+		void messageHandler(Address from, Ptr<Packet> packet);
 		//contabiliza a energia gasta pelo recebimento e processamento da resposta
 		//e a transmissão da mensagem
-		void responseHandler();
+		void responseHandler(Address from, Ptr<Packet> packet);
 	private:
-		double traffic;//mensagens/s
+		double traffic;//mensagens/ns
 		double requestProbabilty;//probabilidade de uma mensagem gerar um request
 		double energyPrice;//dolares/joule
 		uint32_t requestSize;//tamanho do request em bytes
@@ -83,33 +92,28 @@ class Router{
 
 
 class Wan{
-	int nCPLinks;
-	ControlLink* controlPlaneLinks;
-	int nSBLinks;
-	ControlLink* southBoundLinks;
-	NodeContainer nodes;
+	private:
+		vector<ControlLink> controlPlaneLinks;
+		vector<ControlLink> southBoundLinks;
+		vector<Controller> controllers;
+		vector<Router> routers;
+		NodeContainer nodes;
+		void addSouthBoundLink(double joulesPerBit, double propagationTime,
+			int controller, int router);
+		void addControlPlaneLink(double joulesPerBit, double propagationTime,
+			int controler1, int controler2);
 	public:
-		//vetores de [nLocations] posições
-		int nLoc;
-		Controller* controllers;
-		Router* routers;
-		
-		Wan(int nCPLinks, int nLocations);
-		int addLocation(Controller ctrl, Router rtr);
-		int addRouter();
+		void addLocation(Controller ctrl, Router rtr);
 		void installIpv4();
 		void addLink(double joulesPerBit, double propagationTime, int node1,
 			int node2);
-		int addSouthBoundLink(double joulesPerBit, double propagationTime,
-			int controller, int router);
-		int addControlPlaneLink(double joulesPerBit, double propagationTime,
-			int controler1, int controler2);
-		Ptr<Socket> getSocket(InetSocketAddress iaddr);
-		Ptr<Node> getNode(InetSocketAddress iaddr);
+		//interval é o intervalo dentro do qual essa função é chamada
+		void generateTraffic(Time interval);
+		void handleRequest(Address from, Ptr<Packet> packet);
+		Controller getControllerFromRouterIP(Address addr);
 };
 
-Ptr<Socket> s_controlador1;//gambs momentânea. Usar uma estrutura com todos os sockets
-//e selecionar pelo segundo campo do ip. Para isso, usar Serialize() e pegar buff[2]
+Wan wan;//gloabal para facilitar os handlers
 
 //função de callback para tratar respostas recebidas por determinado comutador
 void ReceiveRequest(Ptr<Socket> socket){
@@ -119,14 +123,7 @@ void ReceiveRequest(Ptr<Socket> socket){
 	while ((packet = socket->RecvFrom(from))){
 		//se válido
 		if (packet->GetSize() > 0){
-			//InetSocketAddress iaddr = InetSocketAddress::ConvertFrom(from);
-			//uint8_t buf[4]; iaddr.GetIpv4().Serialize(buf);
-			NS_LOG_UNCOND("Nova requisicao");
-			//envie uma resposta
-			s_controlador1->SendTo(Create<Packet>(
-				packet->GetSize()),
-				0,
-				InetSocketAddress::ConvertFrom(from));
+			wan.handleRequest(from, packet);
 		}
 	}
 }
@@ -147,20 +144,23 @@ void ReceiveResponse(Ptr<Socket> socket){
 
 //função de callback para o algoritmo distribuido que roda no plano de controle
 void ReceiveCPMessage(Ptr<Socket> socket){
+	Ptr<Packet> packet;
+	Address from;
+	//para cada pacote
+	while ((packet = socket->RecvFrom(from))){
+		//se válido
+		if (packet->GetSize() > 0){
+			NS_LOG_UNCOND("Nova mensagem de plano de controle");
+		}
+	}
 }
 
 //envia uma mensagem e ativa o temporizador para enviar mais, até terminbar pktCount
-static void GenerateTraffic (Ptr<Socket>* socket, uint32_t pktSize,
-	uint32_t pktCount, Time pktInterval){
+static void GenerateTraffic(uint32_t pktCount, Time pktInterval){
 	if (pktCount > 0){
-		//envia PktSize bytes
-		socket[0]->Send(Create<Packet>(pktSize));
+		wan.generateTraffic(pktInterval);
 		//ativa o temporizador para enviar mais
-		Simulator::Schedule (pktInterval, &GenerateTraffic, socket, pktSize,
-			pktCount - 1, pktInterval);
-	}else{
-		//se já tiver enviado tudo, termine
-		socket[0]->Close ();
+		Simulator::Schedule (pktInterval, &GenerateTraffic, pktCount-1, pktInterval);
 	}
 }
 
@@ -169,7 +169,6 @@ int main(int argc, char** argv){
 	cmd.Parse (argc, argv);
 	
 	//Alguns parâmetros de simulação
-	uint32_t PpacketSize = 200;	//tamanho dos pacotes em bytes
 	uint32_t numPackets = 10000;	//número máximo de pacotes a enviar
 	//intervalo de envio dentro de um mesmo dispositivo (s)
 	double interval = 1;
@@ -179,73 +178,46 @@ int main(int argc, char** argv){
 	
 	//resolução de tempo em nanossegundos
 	Time::SetResolution (Time::NS);
+	srand((unsigned)time(NULL));
 	
-	//criando nós da rede
-	Ptr<Node> comutador = CreateObject<Node>();
-	Ptr<Node> controlador1 = CreateObject<Node>();
-	Ptr<Node> controlador2 = CreateObject<Node>();
+	double capacity = 2;//2 requests por ns
+	double responseProbability = 0.5;//50% de chance
+	double processingEnergy = 0;//J/mensagem
+	double energyPrice = 0;//$/J
+	uint32_t responseSize = 1024;//1kb
+	uint32_t requestSize = 1024;//1kb
+	double requestProbabilty = 0.5;//50% de chance
+	int degree = 1;
+	double traffic = 0.7;//0.7 mensagens por s
 	
-	//agrupando os nós
-	NodeContainer nodes = NodeContainer(comutador,controlador1,controlador2);//usar add
-	NodeContainer nodesLink1 = NodeContainer(comutador,controlador1);
-	NodeContainer nodesLink2 = NodeContainer(comutador,controlador2);
+	Controller ctrl1 = Controller(capacity, responseProbability, processingEnergy,
+		energyPrice, responseSize,degree);
+	Router rtr1 = Router(traffic, requestProbabilty, energyPrice, requestSize,
+		degree);
 	
-	//configurando uma conexão ponto a ponto
-	PointToPointHelper pointToPoint;
-	pointToPoint.SetDeviceAttribute ("DataRate", StringValue("5Mbps"));
-	pointToPoint.SetChannelAttribute ("Delay", StringValue("2ms"));
+	Controller ctrl2 = Controller(capacity, responseProbability, processingEnergy,
+		energyPrice, responseSize,degree);
+	Router rtr2 = Router(traffic, requestProbabilty, energyPrice, requestSize,
+		degree);
 	
-	//criando um link ponto a ponto entre os nós 1 e 2
-	NetDeviceContainer link1 = pointToPoint.Install(nodesLink1);
-	NetDeviceContainer link2 = pointToPoint.Install(nodesLink2);
+	wan.addLocation(ctrl1, rtr1);
+	wan.addLocation(ctrl2, rtr2);
 	
-	//Instalando a pilha ip em todos os nós
-	InternetStackHelper internet;
-	internet.Install(nodes);
+	wan.installIpv4();
 	
-	//atribuindo endereços de ip (cada enlace é uma sub-rede)
-	Ipv4AddressHelper ipv4;
-	ipv4.SetBase("10.1.1.0", "255.255.255.0");
-	ipv4.Assign(link1);
-	ipv4.SetBase("10.1.2.0", "255.255.255.0");
-	ipv4.Assign(link2);
+	double joulesPerBit = 0;
+	double propagationTime = 0;
+	int node1 = 0;
+	int node2 = 1;
+	wan.addLink(joulesPerBit, propagationTime, node1, node2);
 	
-	//usaremos UDP por conveniência
-	TypeId tid = TypeId::LookupByName ("ns3::UdpSocketFactory");
-	
-	//criando os sockets (a declaração de s_controlador1 está fora por gambs)
-	Ptr<Socket> s_comutador1 = Socket::CreateSocket(comutador, tid);
-	Ptr<Socket> s_comutador2 = Socket::CreateSocket(comutador, tid);
-	s_controlador1 = Socket::CreateSocket(controlador1, tid);
-	Ptr<Socket> s_controlador2 = Socket::CreateSocket(controlador2, tid);
-	
-	//configurando a parte servidora (controladores) e definindo handlers
-	s_controlador1->Bind(InetSocketAddress(Ipv4Address::GetAny(), 80));
-	s_controlador1->SetRecvCallback(MakeCallback(&ReceiveRequest));
-	s_controlador2->Bind(InetSocketAddress(Ipv4Address::GetAny(), 80));
-	s_controlador2->SetRecvCallback(MakeCallback(&ReceiveRequest));
-	
-	//configurando a parte cliente (o comutador) e definindo handlers
-	//Há um socket para cada link
-	Ptr<Ipv4> ipv4Controlador1 = controlador1->GetObject<Ipv4>();
-	InetSocketAddress remote1 = InetSocketAddress(
-		ipv4Controlador1->GetAddress(1,0).GetLocal(),
-		80);
-	s_comutador1->Connect(remote1);
-	s_comutador1->SetRecvCallback(MakeCallback(&ReceiveResponse));
-	
-	Ptr<Ipv4> ipv4Controlador2 = controlador2->GetObject<Ipv4>();
-	InetSocketAddress remote2 = InetSocketAddress(
-		ipv4Controlador2->GetAddress(1,0).GetLocal(),
-		80);
-	s_comutador2->Connect(remote2);
-	s_comutador2->SetRecvCallback(MakeCallback(&ReceiveResponse));
+	NS_LOG_UNCOND("INICIANDO SIMULAÇÃO");
 	
 	//chamando pela primeira vez o gerador de tráfego
-	Simulator::Schedule(Seconds(startTime), &GenerateTraffic, &s_comutador1,
-		PpacketSize,numPackets, Seconds(interval));
+	Simulator::Schedule(Seconds(startTime), &GenerateTraffic, numPackets,
+		Seconds(interval));
 
-	Simulator::Stop (Seconds(finishTime));
+	Simulator::Stop(Seconds(finishTime));
 	
 	Simulator::Run();
 	Simulator::Destroy ();
@@ -263,43 +235,44 @@ Controller::Controller(double _capacity, double _responseProbability,
 	responseSize = _responseSize;//tamanho da resposta em bytes
 	
 	node = CreateObject<Node>();
-	
-	controlPlaneLinks = (ControlLink*) malloc(sizeof(ControlLink)*degree);
-	southBoundLinks = (ControlLink*) malloc(sizeof(ControlLink)*(degree+1));
-}
-
-Controller::~Controller(){
-	free(controlPlaneLinks);
-	free(southBoundLinks);
 }
 
 void Controller::addLink(ControlLink link){
 	//separa os bytes do endereço de ipv4
 	uint8_t buffer[4];
-	//obtem um dos sockets
-	Ptr<Socket> socket = link.sockets[0];
-	//obtem o endereço associado
-	Ipv4Address addr = socket->GetObject<Ipv4>()->GetAddress(1,0).GetLocal();
+	//obtem um dos endereços associados
+	Ipv4Address addr = link.ipv4Addr[0];
 	//separa os bytes
 	addr.Serialize(buffer);
 	//verifica a natureza do link
 	if(buffer[1]==1){
 		//southbound
-		southBoundLinks[(int)buffer[2]] = link;
+		southBoundLinks.push_back(link);
+		NS_LOG_UNCOND("Inserido sbLink em controlador com endereços "<<link.ipv4Addr[0]<<" e "<<link.ipv4Addr[1]);
 	}else{
 		//control plane
-		controlPlaneLinks[(int)buffer[2]] = link;
+		controlPlaneLinks.push_back(link);
+		NS_LOG_UNCOND("Inserido cpLink em controlador com endereços "<<link.ipv4Addr[0]<<" e "<<link.ipv4Addr[1]);
 	}
 }
 
 //prepara e envia a resposta e calcula a energia gasta
-void Controller::requestHandler(){
+void Controller::requestHandler(Address from, Ptr<Packet> packet){
+	NS_LOG_UNCOND("Nova requisição");
+	int i;
+	InetSocketAddress iAddr = InetSocketAddress::ConvertFrom(from);
+	Ipv4Address refIpv4 = iAddr.GetIpv4();
+	for(i=0;i<(int)southBoundLinks.size();i++){
+		//o index 0 em links southbound corresponde ao controlador
+		if(southBoundLinks[i].ipv4Addr[1] == refIpv4){
+			NS_LOG_UNCOND("Disparando resposta");
+			southBoundLinks[i].sockets[0]->SendTo(Create<Packet>(responseSize),0,iAddr);
+			break;
+		}
+	}
 }
 
-//envia a resposta e calcula a energia gasta
-double Controller::sendResponse(){
-	return 0.0;
-}
+///////////////////////////////////////////////////////////////////////////////
 
 Router::Router(double _traffic, double _requestProbabilty, double _energyPrice, 
 	uint32_t _requestSize, int degree){
@@ -309,70 +282,80 @@ Router::Router(double _traffic, double _requestProbabilty, double _energyPrice,
 	energyPrice = _energyPrice;//dolares/joule
 	requestSize = _requestSize;//tamanho do request em bytes
 	
+	parent = 0;
 	node = CreateObject<Node>();
-	
-	southBoundLinks = (ControlLink*) malloc(sizeof(ControlLink)*(degree+1));
-}
-
-Router::~Router(){
-	free(southBoundLinks);
 }
 
 //insere um southbound link
 void Router::addLink(ControlLink link){
 	//separa os bytes do endereço de ipv4
 	uint8_t buffer[4];
-	//obtem um dos sockets
-	Ptr<Socket> socket = link.sockets[0];
-	//obtem o endereço associado
-	Ipv4Address addr = socket->GetObject<Ipv4>()->GetAddress(1,0).GetLocal();
+	//obtem um dos endereços associados
+	Ipv4Address addr = link.ipv4Addr[0];
 	//separa os bytes
 	addr.Serialize(buffer);
 	//verifica a natureza do link
 	if(buffer[1]==1){
 		//southbound
-		southBoundLinks[(int)buffer[2]] = link;
+		southBoundLinks.push_back(link);
+		NS_LOG_UNCOND("Inserido sbLink em comutador com endereços "<<link.ipv4Addr[0]<<" e "<<link.ipv4Addr[1]);
 	}else{
 		NS_LOG_UNCOND("Comutadores não possuem links de plano de controle.");
 	}
 }
 
+void Router::sendRequest(Time interval){
+	//probabilidade de uma mensagem ser processada agora
+	//prob = período entre chamadas dessa função / período entre mensagens nesse comutador
+	//prob = interval.GetSeconds()/(1/traffic);
+	double probMsg = interval.GetSeconds()*traffic;
+	probMsg = (probMsg>1)?1:probMsg;
+	
+	//probabilidade de um request ser enviado é a probabilidade de uma mensagem ser processada
+	//E gerar um request
+	double probReq = probMsg * requestProbabilty;
+	
+	//gera um request com a probabilidade calculada
+	if((float) rand()/RAND_MAX < probReq){
+		NS_LOG_UNCOND("Disparando requisição");
+		//no caso de um southBound link, o index 1 sempre corresponde ao comutador,
+		//de endereço ipv4 10.1.Y.1
+		southBoundLinks[parent].sockets[1]->Send(Create<Packet>(requestSize));
+	}
+}
 //contabiliza a energia gasta com o recebimento, processamento e eventual
 //transmissão de uma mensagem, além da transmissão de uma eventual solicitação
 //ao controlador
-void Router::messageHandler(){
+void Router::messageHandler(Address from, Ptr<Packet> packet){
 }
 
 //contabiliza a energia gasta pelo recebimento e processamento da resposta e a
 //transmissão da mensagem
-void Router::responseHandler(){
+void Router::responseHandler(Address from, Ptr<Packet> packet){
 }
 
-Wan::Wan(int nCPLinks, int nLocations){
-	int nSBLinks = nCPLinks + nLocations;
-	controlPlaneLinks = (ControlLink*) malloc(nCPLinks*sizeof(ControlLink));
-	southBoundLinks = (ControlLink*) malloc(nSBLinks*sizeof(ControlLink));
-	nLoc = 0;//quantas locações já foram instaladas
-	controllers = (Controller*) malloc(nLocations*sizeof(Controller));
-	routers = (Router*) malloc(nLocations*sizeof(Router));
-}
 
-int  Wan::addLocation(Controller ctrl, Router rtr){
+//////////////////////////////////////////////////////////////////////////////
+
+void Wan::addLocation(Controller ctrl, Router rtr){
 	//registrando os nós novos no container global da rede
 	nodes.Add(ctrl.node);
 	nodes.Add(rtr.node);
 	//inserindo os objetos nos vetores correspondentes
-	controllers[nLoc] = ctrl;
-	routers[nLoc] = rtr;
-	//adicionando o link da interface southbound interna à localização
-	addSouthBoundLink(0, 0, nLoc, nLoc);
-	return nLoc++;
+	controllers.push_back(ctrl);
+	routers.push_back(rtr);
 }
 
 void Wan::installIpv4(){
 	//Instalando a pilha ip em todos os nós
 	InternetStackHelper internet;
 	internet.Install(nodes);
+	
+	int i;
+	for(i=0;i<(int)controllers.size();i++){
+		//adicionando o link da interface southbound interna à localização i
+		addSouthBoundLink(0, 0, i, i);
+	}
 }
 
 void Wan::addLink(double joulesPerBit, double propagationTime, int node1,
@@ -381,13 +364,15 @@ void Wan::addLink(double joulesPerBit, double propagationTime, int node1,
 	addControlPlaneLink(joulesPerBit, propagationTime, node1, node2);
 }
 
-int Wan::addSouthBoundLink(double joulesPerBit, double propagationTime,
+void Wan::addSouthBoundLink(double joulesPerBit, double propagationTime,
 	int controller, int router){
 	ControlLink link;
 	link.joulesPerBit = joulesPerBit;
 	link.propagationTime = propagationTime;
 	link.nodes[0] = controllers[controller].node;
 	link.nodes[1] = routers[router].node;
+	link.id[0] = controller;
+	link.id[1] = router;
 	//configurando conexão ponto a ponto
 	char ptime[50];
 	sprintf(ptime,"%fms",propagationTime);
@@ -401,10 +386,18 @@ int Wan::addSouthBoundLink(double joulesPerBit, double propagationTime,
 	
 	//atribuindo endereços
 	Ipv4AddressHelper ipv4;
-	char addr[50];
-	sprintf(addr,"10.1.%d.0", nSBLinks);
-	ipv4.SetBase(addr, "255.255.255.0");
+	char addr_base[50];
+	sprintf(addr_base,"10.1.%d.0", (int) southBoundLinks.size());
+	char addr_controller[50];
+	sprintf(addr_controller,"10.1.%d.1", (int) southBoundLinks.size());
+	char addr_router[50];
+	sprintf(addr_router,"10.1.%d.2", (int) southBoundLinks.size());
+	
+	link.ipv4Addr[0] = Ipv4Address(addr_controller);
+	link.ipv4Addr[1] = Ipv4Address(addr_router);
+	ipv4.SetBase(addr_base, "255.255.255.0");
 	ipv4.Assign(nDev);
+	
 	//criando sockets
 	TypeId tid = TypeId::LookupByName ("ns3::UdpSocketFactory");
 	link.sockets[0] = Socket::CreateSocket(link.nodes[0], tid);
@@ -418,30 +411,28 @@ int Wan::addSouthBoundLink(double joulesPerBit, double propagationTime,
 	
 	//COMUTADOR
 	//comutador se torna cliente
-	Ptr<Ipv4> ipv4Ctrl = link.sockets[1]->GetObject<Ipv4>();
 	InetSocketAddress remote = InetSocketAddress(
-		ipv4Ctrl->GetAddress(1,0).GetLocal(),
+		addr_controller,
 		80);
 	link.sockets[1]->Connect(remote);
 	//handler de response dessa interface de rede do comutador
 	link.sockets[1]->SetRecvCallback(MakeCallback(&ReceiveResponse));
-	
 	//Inserindo o link na lista de Wan
-	southBoundLinks[nSBLinks] = link;
+	southBoundLinks.push_back(link);
 	//Inserindo nas listas dos nós
 	controllers[controller].addLink(link);
 	routers[router].addLink(link);
-	
-	return nSBLinks++;
 }
 
-int Wan::addControlPlaneLink(double joulesPerBit, double propagationTime,
+void Wan::addControlPlaneLink(double joulesPerBit, double propagationTime,
 	int controller1, int controller2){
 	ControlLink link;
 	link.joulesPerBit = joulesPerBit;
 	link.propagationTime = propagationTime;
 	link.nodes[0] = controllers[controller1].node;
 	link.nodes[1] = controllers[controller2].node;
+	link.id[0] = controller1;
+	link.id[1] = controller2;
 	//configurando conexão ponto a ponto
 	char ptime[50];
     sprintf(ptime ,"%fms", propagationTime);
@@ -455,9 +446,16 @@ int Wan::addControlPlaneLink(double joulesPerBit, double propagationTime,
 	
 	//atribuindo endereços
 	Ipv4AddressHelper ipv4;
-	char addr[50];
-	sprintf(addr, "10.0.%d.0",nCPLinks);
-	ipv4.SetBase(addr, "255.255.255.0");
+	char addr_base[50];
+	sprintf(addr_base,"10.0.%d.0", (int) controlPlaneLinks.size());
+	char addr_controller1[50];
+	sprintf(addr_controller1,"10.0.%d.1", (int) controlPlaneLinks.size());
+	char addr_controller2[50];
+	sprintf(addr_controller2,"10.0.%d.2", (int) controlPlaneLinks.size());
+	
+	link.ipv4Addr[0] = Ipv4Address(addr_controller1);
+	link.ipv4Addr[1] = Ipv4Address(addr_controller2);
+	ipv4.SetBase(addr_base, "255.255.255.0");
 	ipv4.Assign(nDev);
 	//criando sockets
 	TypeId tid = TypeId::LookupByName ("ns3::UdpSocketFactory");
@@ -472,38 +470,29 @@ int Wan::addControlPlaneLink(double joulesPerBit, double propagationTime,
 	link.sockets[1]->SetRecvCallback(MakeCallback(&ReceiveCPMessage));
 	
 	//Inserindo o link na lista de Wan
-	controlPlaneLinks[nCPLinks] = link;
+	controlPlaneLinks.push_back(link);
 	//Inserindo nas listas dos nós
 	controllers[controller1].addLink(link);
 	controllers[controller2].addLink(link);
-	
-	return nCPLinks++;
 }
 
-Ptr<Socket> Wan::getSocket(InetSocketAddress iaddr){
-	//separa os bytes do endereço de ipv4
-	uint8_t buffer[4];
-	iaddr.GetIpv4().Serialize(buffer);
-	//verifica a natureza do link
-	if(buffer[1]==1){
-		//controlPlane
-		return controlPlaneLinks[(int)buffer[2]].sockets[(int)buffer[3]-1];
-	}else{
-		//southbound
-		return southBoundLinks[(int)buffer[2]].sockets[(int)buffer[3]-1];
+void Wan::generateTraffic(Time interval){
+	int i;
+	for(i=0;i<(int)routers.size();i++){
+		routers[i].sendRequest(interval);
 	}
 }
 
-Ptr<Node> Wan::getNode(InetSocketAddress iaddr){
+void Wan::handleRequest(Address from, Ptr<Packet> packet){
+	Controller ctrl = getControllerFromRouterIP(from);
+	ctrl.requestHandler(from, packet);
+}
+
+Controller Wan::getControllerFromRouterIP(Address addr){
 	//separa os bytes do endereço de ipv4
 	uint8_t buffer[4];
-	iaddr.GetIpv4().Serialize(buffer);
-	//verifica a natureza do link
-	if(buffer[1]==1){
-		//controlPlane
-		return controlPlaneLinks[(int)buffer[2]].nodes[(int)buffer[3]-1];
-	}else{
-		//southbound
-		return southBoundLinks[(int)buffer[2]].nodes[(int)buffer[3]-1];
-	}
+	InetSocketAddress isaddr = InetSocketAddress::ConvertFrom(addr);
+	isaddr.GetIpv4().Serialize(buffer);
+	//coleta o controller correspondente ao identificador Y do ip
+	return controllers[southBoundLinks[(int)buffer[2]].id[1]];
 }
