@@ -166,6 +166,10 @@ static void GenerateTraffic(uint32_t pktCount, Time pktInterval){
 	}
 }
 
+static void TopologyManager(){
+	NS_LOG_UNCOND("INICIANDO GERENCIADOR DE TOPOLOGIA");
+}
+
 int main(int argc, char** argv){
 	CommandLine cmd;
 	cmd.Parse (argc, argv);
@@ -221,6 +225,8 @@ int main(int argc, char** argv){
 	//chamando pela primeira vez o gerador de tráfego
 	Simulator::Schedule(Seconds(startTime), &GenerateTraffic, numPackets,
 		Seconds(interval));
+	//chamando o gerador de topologia
+	Simulator::Schedule(Seconds(startTime), &TopologyManager);
 
 	Simulator::Stop(Seconds(finishTime));
 	
@@ -329,7 +335,6 @@ void Router::sendRequest(Time interval){
 		//no caso de um southBound link, o index 1 sempre corresponde ao comutador,
 		//de endereço ipv4 10.1.Y.1
 		southBoundLinks[parent].sockets[1]->Send(Create<Packet>(requestSize));
-		printf(">>>>%d, %d, p=%d\n", southBoundLinks[parent].id[0], southBoundLinks[parent].id[1],parent);
 	}
 }
 //contabiliza a energia gasta com o recebimento, processamento e eventual
