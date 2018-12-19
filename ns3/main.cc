@@ -35,10 +35,7 @@ typedef struct{
 
 class Controller{
 	public:
-		//vetor de [degree] posições
 		vector<ControlLink> controlPlaneLinks;
-		//vetor de [degree+1] posições (o último liga o controlador e o
-		//router da mesma localidade)
 		vector<ControlLink> southBoundLinks;
 		
 		Ptr<Node> node;
@@ -46,11 +43,14 @@ class Controller{
 		
 		Controller(double _capacity, double _responseProbability,
 			double _processingEnergy, double _energyPrice, uint32_t _responseSize,
-			int degree, int _ID);
+			int _ID);
 		
 		void addLink(ControlLink link);
 		//prepara e envia a resposta e calcula a energia gasta
 		void requestHandler(Address from, Ptr<Packet> packet);
+		//processa mensagens dentro do plano de controle (para o gerenciamento de 
+		//topologia
+		void cpMessageHandler(Address from, Ptr<Packet> packet);
 	private:
 		double capacity;//requests por segundo
 		double responseProbability;//probabilidade de um request gerar um respose
@@ -62,15 +62,13 @@ class Controller{
 class Router{
 	public:
 		int parent;
-		//vetor de [degree+1] posições (o último liga o controlador e o
-		//router da mesma localidade)
 		vector<ControlLink> southBoundLinks;
 		
 		Ptr<Node> node;
 		int ID;
 		
 		Router(double _traffic, double _requestProbabilty, double _energyPrice,
-			uint32_t _requestSize, int _degree, int _ID);
+			uint32_t _requestSize, int _ID);
 		
 		//insere um southbound link
 		void addLink(ControlLink link);
@@ -78,10 +76,6 @@ class Router{
 		//interval é o intervalo dentro do qual essa função é chamada
 		void sendRequest(Time interval);
 		
-		//contabiliza a energia gasta com o recebimento, processamento e eventual
-		//transmissão de uma mensagem, além da transmissão de uma eventual
-		//solicitaçãoao controlador
-		void messageHandler(Address from, Ptr<Packet> packet);
 		//contabiliza a energia gasta pelo recebimento e processamento da resposta
 		//e a transmissão da mensagem
 		void responseHandler(Address from, Ptr<Packet> packet);
@@ -104,6 +98,9 @@ class Wan{
 			int controller, int router);
 		void addControlPlaneLink(double joulesPerBit, double propagationTime,
 			int controler1, int controler2);
+		Controller* getControllerFromRouterIP(Address addr);
+		Router* getRouterFromControllerIP(Address addr);
+		Controller* getControllerFromControllerIP(Address addr);
 	public:
 		void addLocation(Controller* ctrl, Router* rtr);
 		void installIpv4();
@@ -112,63 +109,26 @@ class Wan{
 		//interval é o intervalo dentro do qual essa função é chamada
 		void generateTraffic(Time interval);
 		void handleRequest(Address from, Ptr<Packet> packet);
-		Controller* getControllerFromRouterIP(Address addr);
+		void handleResponse(Address from, Ptr<Packet> packet);
+		void handleCPMessage(Address from, Ptr<Packet> packet);
+		void defineParents();//inicia o algoritmo distribuído nos controladores
 };
 
 Wan wan;//gloabal para facilitar os handlers
 
 //função de callback para tratar respostas recebidas por determinado comutador
-void ReceiveRequest(Ptr<Socket> socket){
-	Ptr<Packet> packet;
-	Address from;
-	//para cada pacote
-	while ((packet = socket->RecvFrom(from))){
-		//se válido
-		if (packet->GetSize() > 0){
-			wan.handleRequest(from, packet);
-		}
-	}
-}
-
+void ReceiveRequest(Ptr<Socket> socket);
 
 //função de callback para tratar respostas recebidas por determinado comutador
-void ReceiveResponse(Ptr<Socket> socket){
-	Ptr<Packet> packet;
-	Address from;
-	//para cada pacote
-	while ((packet = socket->RecvFrom(from))){
-		//se válido
-		if (packet->GetSize() > 0){
-			NS_LOG_UNCOND("Nova resposta");
-		}
-	}
-}
+void ReceiveResponse(Ptr<Socket> socket);
 
 //função de callback para o algoritmo distribuido que roda no plano de controle
-void ReceiveCPMessage(Ptr<Socket> socket){
-	Ptr<Packet> packet;
-	Address from;
-	//para cada pacote
-	while ((packet = socket->RecvFrom(from))){
-		//se válido
-		if (packet->GetSize() > 0){
-			NS_LOG_UNCOND("Nova mensagem de plano de controle");
-		}
-	}
-}
+void ReceiveCPMessage(Ptr<Socket> socket);
 
 //envia uma mensagem e ativa o temporizador para enviar mais, até terminbar pktCount
-static void GenerateTraffic(uint32_t pktCount, Time pktInterval){
-	if (pktCount > 0){
-		wan.generateTraffic(pktInterval);
-		//ativa o temporizador para enviar mais
-		Simulator::Schedule (pktInterval, &GenerateTraffic, pktCount-1, pktInterval);
-	}
-}
+static void GenerateTraffic(uint32_t pktCount, Time pktInterval);
 
-static void TopologyManager(){
-	NS_LOG_UNCOND("INICIANDO GERENCIADOR DE TOPOLOGIA");
-}
+static void TopologyManager();
 
 int main(int argc, char** argv){
 	CommandLine cmd;
@@ -193,18 +153,15 @@ int main(int argc, char** argv){
 	uint32_t responseSize = 1024;//1kb
 	uint32_t requestSize = 1024;//1kb
 	double requestProbabilty = 0.5;//50% de chance
-	int degree = 1;
 	double traffic = 0.7;//0.7 mensagens por s
 	
 	Controller ctrl1 = Controller(capacity, responseProbability, processingEnergy,
-		energyPrice, responseSize,degree,0);
-	Router rtr1 = Router(traffic, requestProbabilty, energyPrice, requestSize,
-		degree,0);
+		energyPrice, responseSize,0);
+	Router rtr1 = Router(traffic, requestProbabilty, energyPrice, requestSize, 0);
 	
 	Controller ctrl2 = Controller(capacity, responseProbability, processingEnergy,
-		energyPrice, responseSize,degree,1);
-	Router rtr2 = Router(traffic, requestProbabilty, energyPrice, requestSize,
-		degree,1);
+		energyPrice, responseSize,1);
+	Router rtr2 = Router(traffic, requestProbabilty, energyPrice, requestSize, 1);
 	
 	wan.addLocation(&ctrl1, &rtr1);
 	wan.addLocation(&ctrl2, &rtr2);
@@ -218,10 +175,7 @@ int main(int argc, char** argv){
 	wan.addLink(joulesPerBit, propagationTime, node1, node2);
 	
 	NS_LOG_UNCOND("INICIANDO SIMULAÇÃO");
-	
-	rtr1.parent = 0;
-	rtr2.parent = 1;
-	
+		
 	//chamando pela primeira vez o gerador de tráfego
 	Simulator::Schedule(Seconds(startTime), &GenerateTraffic, numPackets,
 		Seconds(interval));
@@ -237,7 +191,7 @@ int main(int argc, char** argv){
 
 Controller::Controller(double _capacity, double _responseProbability,
 	double _processingEnergy, double _energyPrice, uint32_t _responseSize,
-	int degree, int _ID){
+	int _ID){
 	capacity = _capacity;//requests por segundo
 	//probabilidade de um request gerar um respose
 	responseProbability = _responseProbability;
@@ -285,10 +239,31 @@ void Controller::requestHandler(Address from, Ptr<Packet> packet){
 	}
 }
 
+void Controller::cpMessageHandler(Address from, Ptr<Packet> packet){
+	int i;
+	
+	InetSocketAddress iAddr = InetSocketAddress::ConvertFrom(from);
+	Ipv4Address refIpv4 = iAddr.GetIpv4();
+	
+	uint8_t buf[1]; packet->CopyData(buf, 1);
+	NS_LOG_UNCOND("Recebida mensagem de plano de controle: "<<(int)buf[0]);
+	
+	if((int)buf[0]==123){
+		buf[0] = 132;
+		for(i=0;i<(int)southBoundLinks.size();i++){
+			if(controlPlaneLinks[i].ipv4Addr[1] == refIpv4){//GAMBIARRAAAAAAAAAAAAA
+				controlPlaneLinks[i].sockets[0]->SendTo(//GAMBIARRAAAAAAAAAAAAA
+					Create<Packet>(buf, 1),0,iAddr);
+				break;
+			}
+		}	
+	}
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 Router::Router(double _traffic, double _requestProbabilty, double _energyPrice, 
-	uint32_t _requestSize, int degree, int _ID){
+	uint32_t _requestSize, int _ID){
 	traffic = _traffic;//mensagens/s
 	//probabilidade de uma mensagem gerar um request
 	requestProbabilty = _requestProbabilty;
@@ -337,15 +312,11 @@ void Router::sendRequest(Time interval){
 		southBoundLinks[parent].sockets[1]->Send(Create<Packet>(requestSize));
 	}
 }
-//contabiliza a energia gasta com o recebimento, processamento e eventual
-//transmissão de uma mensagem, além da transmissão de uma eventual solicitação
-//ao controlador
-void Router::messageHandler(Address from, Ptr<Packet> packet){
-}
 
 //contabiliza a energia gasta pelo recebimento e processamento da resposta e a
 //transmissão da mensagem
 void Router::responseHandler(Address from, Ptr<Packet> packet){
+	NS_LOG_UNCOND("Recebida resposta");
 }
 
 
@@ -425,12 +396,7 @@ void Wan::addSouthBoundLink(double joulesPerBit, double propagationTime,
 	link.sockets[0]->SetRecvCallback(MakeCallback(&ReceiveRequest));
 	
 	//COMUTADOR
-	//comutador se torna cliente
-	InetSocketAddress remote = InetSocketAddress(
-		addr_controller,
-		80);
-	
-	link.sockets[1]->Connect(remote);
+	link.sockets[1]->Connect(InetSocketAddress(addr_controller,80));
 	//handler de response dessa interface de rede do comutador
 	link.sockets[1]->SetRecvCallback(MakeCallback(&ReceiveResponse));
 	//Inserindo o link na lista de Wan
@@ -479,8 +445,8 @@ void Wan::addControlPlaneLink(double joulesPerBit, double propagationTime,
 	link.sockets[0] = Socket::CreateSocket(link.nodes[0], tid);
 	link.sockets[1] = Socket::CreateSocket(link.nodes[1], tid);
 	
-	link.sockets[0]->Bind(InetSocketAddress(Ipv4Address::GetAny(), 80));
-	link.sockets[1]->Bind(InetSocketAddress(Ipv4Address::GetAny(), 80));
+	link.sockets[0]->Bind(InetSocketAddress(Ipv4Address::GetAny(), 1023));
+	link.sockets[1]->Connect(InetSocketAddress(addr_controller1, 1023));
 	//handler de requests dessa interface de rede do controlador
 	link.sockets[0]->SetRecvCallback(MakeCallback(&ReceiveCPMessage));
 	link.sockets[1]->SetRecvCallback(MakeCallback(&ReceiveCPMessage));
@@ -504,6 +470,16 @@ void Wan::handleRequest(Address from, Ptr<Packet> packet){
 	ctrl->requestHandler(from, packet);
 }
 
+void Wan::handleResponse(Address from, Ptr<Packet> packet){
+	Router* rtr = getRouterFromControllerIP(from);
+	rtr->responseHandler(from, packet);
+}
+
+void Wan::handleCPMessage(Address from, Ptr<Packet> packet){
+	Controller* ctrl = getControllerFromControllerIP(from);
+	ctrl->cpMessageHandler(from, packet);
+}
+
 Controller* Wan::getControllerFromRouterIP(Address addr){
 	//separa os bytes do endereço de ipv4
 	uint8_t buffer[4];
@@ -511,4 +487,85 @@ Controller* Wan::getControllerFromRouterIP(Address addr){
 	isaddr.GetIpv4().Serialize(buffer);
 	//coleta o controller correspondente ao identificador Y do ip
 	return controllers[southBoundLinks[(int)buffer[2]].id[0]];
+}
+
+Router* Wan::getRouterFromControllerIP(Address addr){
+	//separa os bytes do endereço de ipv4
+	uint8_t buffer[4];
+	InetSocketAddress isaddr = InetSocketAddress::ConvertFrom(addr);
+	isaddr.GetIpv4().Serialize(buffer);
+	//coleta o router correspondente ao identificador Y do ip
+	return routers[southBoundLinks[(int)buffer[2]].id[1]];
+}
+
+Controller* Wan::getControllerFromControllerIP(Address addr){
+	//separa os bytes do endereço de ipv4
+	uint8_t buffer[4];
+	InetSocketAddress isaddr = InetSocketAddress::ConvertFrom(addr);
+	isaddr.GetIpv4().Serialize(buffer);
+	//coleta o controller correspondente ao identificador Y do ip
+	return controllers[controlPlaneLinks[(int)buffer[2]].id[2-(int)buffer[3]]];
+}
+
+//inicia o algoritmo distribuído nos controladores
+void Wan::defineParents(){
+	NS_LOG_UNCOND("Transmitida mensagem de plano de controle");
+	uint8_t buf[1];buf[0]=123;
+	controlPlaneLinks[0].sockets[1]->Send(Create<Packet>(buf,1));//GAMBIARRAAAAAAAAAAAAA
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+//função de callback para tratar respostas recebidas por determinado comutador
+void ReceiveRequest(Ptr<Socket> socket){
+	Ptr<Packet> packet;
+	Address from;
+	//para cada pacote
+	while ((packet = socket->RecvFrom(from))){
+		//se válido
+		if (packet->GetSize() > 0){
+			wan.handleRequest(from, packet);
+		}
+	}
+}
+
+
+//função de callback para tratar respostas recebidas por determinado comutador
+void ReceiveResponse(Ptr<Socket> socket){
+	Ptr<Packet> packet;
+	Address from;
+	//para cada pacote
+	while ((packet = socket->RecvFrom(from))){
+		//se válido
+		if (packet->GetSize() > 0){
+			NS_LOG_UNCOND("Nova resposta");
+		}
+	}
+}
+
+//função de callback para o algoritmo distribuido que roda no plano de controle
+void ReceiveCPMessage(Ptr<Socket> socket){
+	Ptr<Packet> packet;
+	Address from;
+	//para cada pacote
+	while((packet = socket->RecvFrom(from))){
+		//se válido
+		if (packet->GetSize() > 0){
+			wan.handleCPMessage(from, packet);
+		}
+	}
+}
+
+//envia uma mensagem e ativa o temporizador para enviar mais, até terminbar pktCount
+static void GenerateTraffic(uint32_t pktCount, Time pktInterval){
+	if (pktCount > 0){
+		wan.generateTraffic(pktInterval);
+		//ativa o temporizador para enviar mais
+		Simulator::Schedule (pktInterval, &GenerateTraffic, pktCount-1, pktInterval);
+	}
+}
+
+static void TopologyManager(){
+	NS_LOG_UNCOND("INICIANDO GERENCIADOR DE TOPOLOGIA");
+	wan.defineParents();
 }
