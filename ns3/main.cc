@@ -20,6 +20,12 @@ using std::vector;
 NS_LOG_COMPONENT_DEFINE ("simulacaoSBRC");
 
 typedef struct{
+	int fromId;
+	int ownerId;
+	double demand;
+}PayLoad;
+
+typedef struct{
 	//para a contagem da energia gasta
 	double joulesPerBit;
 	double propagationTime;
@@ -40,10 +46,19 @@ class Controller{
 		
 		Ptr<Node> node;
 		int ID;
+		double capacity;
+		double responseProbability;//probabilidade de um request gerar um respose
+		double processingEnergy;//joules/request+response
+		double energyPrice;//dolares/joule
+		uint32_t responseSize;//tamanho da resposta em bytes
+		
+		int nLocations;
+		double* demands;//Dados que o algoritmo distribuido coletará
 		
 		Controller(double _capacity, double _responseProbability,
 			double _processingEnergy, double _energyPrice, uint32_t _responseSize,
-			int _ID);
+			int _ID, int _nLocations);
+		~Controller();
 		
 		void addLink(ControlLink link);
 		//prepara e envia a resposta e calcula a energia gasta
@@ -51,12 +66,9 @@ class Controller{
 		//processa mensagens dentro do plano de controle (para o gerenciamento de 
 		//topologia
 		void cpMessageHandler(Address from, Ptr<Packet> packet);
+		void initializeTopologyAlgorithm();
 	private:
-		double capacity;//requests por segundo
-		double responseProbability;//probabilidade de um request gerar um respose
-		double processingEnergy;//joules/request+response
-		double energyPrice;//dolares/joule
-		uint32_t responseSize;//tamanho da resposta em bytes
+		void sendBroadcast(int index, int exceptBy);
 };
 
 class Router{
@@ -67,7 +79,10 @@ class Router{
 		Ptr<Node> node;
 		int ID;
 		
-		Router(double _traffic, double _requestProbabilty, double _energyPrice,
+		double traffic;//mensagens/ns
+		double requestProbability;//probabilidade de uma mensagem gerar um request
+		
+		Router(double _traffic, double _requestProbability, double _energyPrice,
 			uint32_t _requestSize, int _ID);
 		
 		//insere um southbound link
@@ -80,8 +95,6 @@ class Router{
 		//e a transmissão da mensagem
 		void responseHandler(Address from, Ptr<Packet> packet);
 	private:
-		double traffic;//mensagens/ns
-		double requestProbabilty;//probabilidade de uma mensagem gerar um request
 		double energyPrice;//dolares/joule
 		uint32_t requestSize;//tamanho do request em bytes
 };
@@ -92,7 +105,6 @@ class Wan{
 		vector<ControlLink> controlPlaneLinks;
 		vector<ControlLink> southBoundLinks;
 		vector<Controller*> controllers;
-		vector<Router*> routers;
 		NodeContainer nodes;
 		void addSouthBoundLink(double joulesPerBit, double propagationTime,
 			int controller, int router);
@@ -102,6 +114,8 @@ class Wan{
 		Router* getRouterFromControllerIP(Address addr);
 		Controller* getControllerFromControllerIP(Address addr);
 	public:
+		vector<Router*> routers;
+		
 		void addLocation(Controller* ctrl, Router* rtr);
 		void installIpv4();
 		void addLink(double joulesPerBit, double propagationTime, int node1,
@@ -146,22 +160,23 @@ int main(int argc, char** argv){
 	Time::SetResolution (Time::NS);
 	srand((unsigned)time(NULL));
 	
+	int nLocations = 2;
 	double capacity = 2;//2 requests por ns
 	double responseProbability = 0.5;//50% de chance
 	double processingEnergy = 0;//J/mensagem
 	double energyPrice = 0;//$/J
 	uint32_t responseSize = 1024;//1kb
 	uint32_t requestSize = 1024;//1kb
-	double requestProbabilty = 0.5;//50% de chance
+	double requestProbability = 0.5;//50% de chance
 	double traffic = 0.7;//0.7 mensagens por s
 	
 	Controller ctrl1 = Controller(capacity, responseProbability, processingEnergy,
-		energyPrice, responseSize,0);
-	Router rtr1 = Router(traffic, requestProbabilty, energyPrice, requestSize, 0);
+		energyPrice, responseSize,0,nLocations);
+	Router rtr1 = Router(traffic, requestProbability, energyPrice, requestSize, 0);
 	
 	Controller ctrl2 = Controller(capacity, responseProbability, processingEnergy,
-		energyPrice, responseSize,1);
-	Router rtr2 = Router(traffic, requestProbabilty, energyPrice, requestSize, 1);
+		energyPrice, responseSize,1,nLocations);
+	Router rtr2 = Router(traffic, requestProbability, energyPrice, requestSize, 1);
 	
 	wan.addLocation(&ctrl1, &rtr1);
 	wan.addLocation(&ctrl2, &rtr2);
@@ -191,7 +206,7 @@ int main(int argc, char** argv){
 
 Controller::Controller(double _capacity, double _responseProbability,
 	double _processingEnergy, double _energyPrice, uint32_t _responseSize,
-	int _ID){
+	int _ID, int _nLocations){
 	capacity = _capacity;//requests por segundo
 	//probabilidade de um request gerar um respose
 	responseProbability = _responseProbability;
@@ -201,6 +216,14 @@ Controller::Controller(double _capacity, double _responseProbability,
 	
 	node = CreateObject<Node>();
 	ID = _ID;
+	
+	//Para o algoritmo de controle de topologia
+	nLocations = _nLocations;
+	demands = (double*) malloc(sizeof(double)*_nLocations);
+}
+
+Controller::~Controller(){
+	free(demands);
 }
 
 void Controller::addLink(ControlLink link){
@@ -232,41 +255,68 @@ void Controller::requestHandler(Address from, Ptr<Packet> packet){
 		if(southBoundLinks[i].ipv4Addr[1] == refIpv4){
 			NS_LOG_UNCOND("Nova requisição recebida pelo controlador "<<ID<<", de "<<southBoundLinks[i].ipv4Addr[1]<<" para "<<southBoundLinks[i].ipv4Addr[0]);
 			NS_LOG_UNCOND("Disparando resposta");
-			southBoundLinks[i].sockets[0]->SendTo(
-				Create<Packet>(responseSize),0,iAddr);
+			southBoundLinks[i].sockets[0]->Send(Create<Packet>(responseSize));
 			break;
 		}
 	}
 }
 
-void Controller::cpMessageHandler(Address from, Ptr<Packet> packet){
+void Controller::initializeTopologyAlgorithm(){
 	int i;
-	
-	InetSocketAddress iAddr = InetSocketAddress::ConvertFrom(from);
-	Ipv4Address refIpv4 = iAddr.GetIpv4();
-	
-	uint8_t buf[1]; packet->CopyData(buf, 1);
-	NS_LOG_UNCOND("Recebida mensagem de plano de controle: "<<(int)buf[0]);
-	
-	if((int)buf[0]==123){
-		buf[0] = 132;
-		for(i=0;i<(int)southBoundLinks.size();i++){
-			if(controlPlaneLinks[i].ipv4Addr[1] == refIpv4){//GAMBIARRAAAAAAAAAAAAA
-				controlPlaneLinks[i].sockets[0]->SendTo(//GAMBIARRAAAAAAAAAAAAA
-					Create<Packet>(buf, 1),0,iAddr);
-				break;
-			}
-		}	
+	for(i=0;i<nLocations;i++){
+		if(ID==i){
+			demands[i] = wan.routers[ID]->traffic
+				*wan.routers[ID]->requestProbability;
+		}else{
+			demands[i] = -1;
+		}
+	}
+	//envia a posição [ID] de demands para todos os vizinhos
+	sendBroadcast(ID,-1);
+}
+
+//envia a demanda determinada pelo index a todos os vizinhos exceto
+//o de ID [exceptBy]
+void Controller::sendBroadcast(int index, int exceptBy){
+	int i, j;
+	//montando a mensagem: meuID, nó a que se refere o dado e o dado em si
+	PayLoad payload;
+	payload.fromId = ID;
+	payload.ownerId = index;
+	payload.demand = demands[index];
+	//para cada vizinho
+	for(i=0;i<(int)controlPlaneLinks.size();i++){
+		//j se refere ao outro nó do link
+		if(controlPlaneLinks[i].id[0] == ID) j = 1;
+		else j = 0;
+		//se o outro nó do link não for o proibido
+		if(controlPlaneLinks[i].id[j] != exceptBy){
+			controlPlaneLinks[i].sockets[1-j]->Send(
+				Create<Packet>((uint8_t*)&payload,sizeof(payload)));
+		}
+	}
+}
+
+void Controller::cpMessageHandler(Address from, Ptr<Packet> packet){
+	PayLoad payload; packet->CopyData((uint8_t*)&payload, sizeof(PayLoad));
+	NS_LOG_UNCOND("Recebida mensagem de plano de controle: demand = "
+		<<payload.demand<<" vindo de "<<payload.fromId);
+	//se o dado for novo
+	if(demands[payload.ownerId]==-1){
+		//insira no lugar
+		demands[payload.ownerId] = payload.demand;
+		//repasse via broadcast a todos menos o remetente
+		sendBroadcast(payload.ownerId, payload.fromId);
 	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-Router::Router(double _traffic, double _requestProbabilty, double _energyPrice, 
+Router::Router(double _traffic, double _requestProbability, double _energyPrice, 
 	uint32_t _requestSize, int _ID){
 	traffic = _traffic;//mensagens/s
 	//probabilidade de uma mensagem gerar um request
-	requestProbabilty = _requestProbabilty;
+	requestProbability = _requestProbability;
 	energyPrice = _energyPrice;//dolares/joule
 	requestSize = _requestSize;//tamanho do request em bytes
 	
@@ -302,7 +352,7 @@ void Router::sendRequest(Time interval){
 	
 	//probabilidade de um request ser enviado é a probabilidade de uma mensagem ser processada
 	//E gerar um request
-	double probReq = probMsg * requestProbabilty;
+	double probReq = probMsg * requestProbability;
 	
 	//gera um request com a probabilidade calculada
 	if((float) rand()/RAND_MAX < probReq){
@@ -390,12 +440,13 @@ void Wan::addSouthBoundLink(double joulesPerBit, double propagationTime,
 	link.sockets[1] = Socket::CreateSocket(link.nodes[1], tid);
 	
 	//CONTROLADOR
-	//controlador se torna servidor
-	link.sockets[0]->Bind(InetSocketAddress(Ipv4Address::GetAny(), 80));
+	link.sockets[0]->Bind(InetSocketAddress(addr_controller, 80));
+	link.sockets[0]->Connect(InetSocketAddress(addr_router, 80));
 	//handler de requests dessa interface de rede do controlador
 	link.sockets[0]->SetRecvCallback(MakeCallback(&ReceiveRequest));
 	
 	//COMUTADOR
+	link.sockets[1]->Bind(InetSocketAddress(addr_router,80));
 	link.sockets[1]->Connect(InetSocketAddress(addr_controller,80));
 	//handler de response dessa interface de rede do comutador
 	link.sockets[1]->SetRecvCallback(MakeCallback(&ReceiveResponse));
@@ -445,7 +496,9 @@ void Wan::addControlPlaneLink(double joulesPerBit, double propagationTime,
 	link.sockets[0] = Socket::CreateSocket(link.nodes[0], tid);
 	link.sockets[1] = Socket::CreateSocket(link.nodes[1], tid);
 	
-	link.sockets[0]->Bind(InetSocketAddress(Ipv4Address::GetAny(), 1023));
+	link.sockets[0]->Bind(InetSocketAddress(addr_controller1, 1023));
+	link.sockets[1]->Bind(InetSocketAddress(addr_controller2, 1023));
+	link.sockets[0]->Connect(InetSocketAddress(addr_controller2, 1023));
 	link.sockets[1]->Connect(InetSocketAddress(addr_controller1, 1023));
 	//handler de requests dessa interface de rede do controlador
 	link.sockets[0]->SetRecvCallback(MakeCallback(&ReceiveCPMessage));
@@ -509,9 +562,10 @@ Controller* Wan::getControllerFromControllerIP(Address addr){
 
 //inicia o algoritmo distribuído nos controladores
 void Wan::defineParents(){
-	NS_LOG_UNCOND("Transmitida mensagem de plano de controle");
-	uint8_t buf[1];buf[0]=123;
-	controlPlaneLinks[0].sockets[1]->Send(Create<Packet>(buf,1));//GAMBIARRAAAAAAAAAAAAA
+	int i=1;
+	for(i=0; i<(int)controllers.size(); i++){
+		controllers[i]->initializeTopologyAlgorithm();
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -528,7 +582,6 @@ void ReceiveRequest(Ptr<Socket> socket){
 		}
 	}
 }
-
 
 //função de callback para tratar respostas recebidas por determinado comutador
 void ReceiveResponse(Ptr<Socket> socket){
