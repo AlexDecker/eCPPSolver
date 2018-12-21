@@ -49,11 +49,14 @@ class Controller{
 		double capacity;
 		double responseProbability;//probabilidade de um request gerar um respose
 		double processingEnergy;//joules/request+response
+		double fixedEnergy;//joules/s
 		double energyPrice;//dolares/joule
 		uint32_t responseSize;//tamanho da resposta em bytes
 		
+		//Utilizado em estatísticas
 		unsigned long int numberOfResponses;
-		
+		double receivedLastRequest;//momento em que recebeu a última mensagem em s
+		////
 		//Utilizado no algoritmo de determinação de topologia
 		int nLocations;
 		double* demands;//Dados que o algoritmo distribuido coletará
@@ -61,8 +64,8 @@ class Controller{
 		//////
 		
 		Controller(double _capacity, double _responseProbability,
-			double _processingEnergy, double _energyPrice, uint32_t _responseSize,
-			int _ID, int _nLocations);
+			double _processingEnergy, double fixedEnergy, double _energyPrice,
+			uint32_t _responseSize, int _ID, int _nLocations);
 		~Controller();
 		
 		void addLink(ControlLink link);
@@ -160,7 +163,6 @@ int main(int argc, char** argv){
 	CommandLine cmd;
 	cmd.Parse (argc, argv);
 	
-	double startTime = 0.0;	//(s)
 	double finishTime = 10.0;	//(s)
 	
 	//resolução de tempo em nanossegundos
@@ -179,16 +181,17 @@ int main(int argc, char** argv){
 	double capacity = 2;//2 requests por s
 	double responseProbability = 0.5;//50% de chance
 	double processingEnergy = 0;//J/mensagem
-	double energyPrice = 0;//$/J
+	double fixedEnergy = 600;//600W
+	double energyPrice = 0.000000033;//$/J -> 0.12/kWh
 	double requestProbability = 0.5;//50% de chance
 	double traffic = 1000000/(msgSize*8);//1Gbps
 	
 	Controller ctrl1 = Controller(capacity, responseProbability, processingEnergy,
-		energyPrice, msgSize,0,nLocations);
+		fixedEnergy, energyPrice, msgSize,0,nLocations);
 	Router rtr1 = Router(traffic, requestProbability, energyPrice, msgSize, 0);
 	
 	Controller ctrl2 = Controller(capacity, responseProbability, processingEnergy,
-		energyPrice, msgSize,1,nLocations);
+		fixedEnergy, energyPrice, msgSize,1,nLocations);
 	Router rtr2 = Router(traffic/2, requestProbability, energyPrice, msgSize, 1);
 	
 	wan.addLocation(&ctrl1, &rtr1);
@@ -205,28 +208,29 @@ int main(int argc, char** argv){
 	NS_LOG_UNCOND("INICIANDO SIMULAÇÃO");
 		
 	//chamando pela primeira vez o gerador de tráfego
-	Simulator::Schedule(Seconds(startTime), &GenerateTraffic, numPackets,
+	Simulator::Schedule(Seconds(0.0), &GenerateTraffic, numPackets,
 		Seconds(interval));
 	//chamando o gerador de topologia
-	Simulator::Schedule(Seconds(startTime), &TopologyManager);
+	Simulator::Schedule(Seconds(0.0), &TopologyManager);
 
 	Simulator::Stop(Seconds(finishTime));
 	
 	Simulator::Run();
 	Simulator::Destroy();
-	
+	NS_LOG_UNCOND("EM "<<finishTime<<" SEGUNDOS DE SIMULAÇÃO: ");
 	wan.printStatistics();
 	
 	return 0;
 }
 
 Controller::Controller(double _capacity, double _responseProbability,
-	double _processingEnergy, double _energyPrice, uint32_t _responseSize,
-	int _ID, int _nLocations){
+	double _processingEnergy, double _fixedEnergy, double _energyPrice, 
+	uint32_t _responseSize, int _ID, int _nLocations){
 	capacity = _capacity;//requests por segundo
 	//probabilidade de um request gerar um respose
 	responseProbability = _responseProbability;
 	processingEnergy = _processingEnergy;
+	fixedEnergy = _fixedEnergy;
 	energyPrice = _energyPrice;//dolares/joule
 	responseSize = _responseSize;//tamanho da resposta em bytes
 	
@@ -234,6 +238,7 @@ Controller::Controller(double _capacity, double _responseProbability,
 	ID = _ID;
 	
 	numberOfResponses = 0;
+	receivedLastRequest = 0;
 	
 	//Para o algoritmo de controle de topologia
 	nLocations = _nLocations;
@@ -276,6 +281,7 @@ void Controller::requestHandler(Address from, Ptr<Packet> packet){
 			//o index 0 em links southbound corresponde ao controlador
 			if(southBoundLinks[i].ipv4Addr[1] == refIpv4){
 				numberOfResponses++;//para estatísticas
+				receivedLastRequest = Simulator::Now().GetSeconds();
 				southBoundLinks[i].sockets[0]->Send(Create<Packet>(responseSize));
 				break;
 			}
@@ -632,15 +638,34 @@ void Wan::defineParents(){
 
 void Wan::printStatistics(){
 	int i;
+	double totalCtrlConsumption = 0;
 	NS_LOG_UNCOND("Controladores:");
 	for(i=0;i<(int)controllers.size();i++){
-		NS_LOG_UNCOND("|"<<i<<"| Respostas: "<<controllers[i]->numberOfResponses);
+		double fixedConsumption = controllers[i]->receivedLastRequest
+			*controllers[i]->fixedEnergy*controllers[i]->energyPrice;
+		double processingConsumption = 0;
+		double transmittingConsumption = 0;
+		double controllerConsumption = fixedConsumption
+			+processingConsumption+transmittingConsumption;
+		NS_LOG_UNCOND("|"<<i<<"| Respostas: "<<controllers[i]->numberOfResponses
+			<<"; ConsumoFixo: "<<fixedConsumption
+			<<"; Consumo por processamento: "<<processingConsumption
+			<<"; Consumo por transmissão: "<<transmittingConsumption
+			<<"; TOTAL: "<<controllerConsumption);
+		totalCtrlConsumption+=controllerConsumption;
 	}
+	NS_LOG_UNCOND("TOTAL GASTO PELOS CONTROLADORES: $"<<totalCtrlConsumption);
+	double totalRtrConsumption = 0;
 	NS_LOG_UNCOND("Comutadores");
 	for(i=0;i<(int)routers.size();i++){
+		double transmittingConsumption = 0;
 		NS_LOG_UNCOND("|"<<i<<"| Mensagens: "<<routers[i]->numberOfMessages
-		<< "; Requisições: " << routers[i]->numberOfRequests);
+		<< "; Requisições: " << routers[i]->numberOfRequests
+		<< "; Consumo por transmissão: "<<transmittingConsumption);
+		totalRtrConsumption += transmittingConsumption;
 	}
+	NS_LOG_UNCOND("TOTAL GASTO PELOS COMUTADORES: $"<<totalRtrConsumption);
+	NS_LOG_UNCOND("TOTAL GERAL: $"<<totalCtrlConsumption+totalRtrConsumption);
 }
 
 //////////////////////////////////////////////////////////////////////////
