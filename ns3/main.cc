@@ -55,7 +55,9 @@ class Controller{
 		
 		//Utilizado em estatísticas
 		unsigned long int numberOfResponses;
+		double transmittingConsumption;//em $
 		double receivedLastRequest;//momento em que recebeu a última mensagem em s
+		unsigned long int nCPMsgs;//número de mensagens do algoritmo de controle de topologia
 		////
 		//Utilizado no algoritmo de determinação de topologia
 		int nLocations;
@@ -92,6 +94,7 @@ class Router{
 		
 		unsigned long int numberOfMessages;
 		unsigned long int numberOfRequests;
+		double transmittingConsumption;//em $
 		
 		double traffic;//mensagens/ns
 		double requestProbability;//probabilidade de uma mensagem gerar um request
@@ -180,7 +183,7 @@ int main(int argc, char** argv){
 	
 	double capacity = 2;//2 requests por s
 	double responseProbability = 0.5;//50% de chance
-	double processingEnergy = 0;//J/mensagem
+	double processingEnergy = 0.000000033;//J/mensagem
 	double fixedEnergy = 600;//600W
 	double energyPrice = 0.000000033;//$/J -> 0.12/kWh
 	double requestProbability = 0.5;//50% de chance
@@ -199,8 +202,8 @@ int main(int argc, char** argv){
 	
 	wan.installIpv4();
 	
-	double joulesPerBit = 0;
-	double propagationTime = 0;
+	double joulesPerBit = 0.000000033;
+	double propagationTime = 0.5;
 	int node1 = 0;
 	int node2 = 1;
 	wan.addLink(joulesPerBit, propagationTime, node1, node2);
@@ -239,6 +242,8 @@ Controller::Controller(double _capacity, double _responseProbability,
 	
 	numberOfResponses = 0;
 	receivedLastRequest = 0;
+	transmittingConsumption = 0;//em $
+	nCPMsgs = 0;
 	
 	//Para o algoritmo de controle de topologia
 	nLocations = _nLocations;
@@ -283,6 +288,8 @@ void Controller::requestHandler(Address from, Ptr<Packet> packet){
 				numberOfResponses++;//para estatísticas
 				receivedLastRequest = Simulator::Now().GetSeconds();
 				southBoundLinks[i].sockets[0]->Send(Create<Packet>(responseSize));
+				//contabilizando energia gasta
+				transmittingConsumption+=8*responseSize*southBoundLinks[i].joulesPerBit*energyPrice;
 				break;
 			}
 		}
@@ -322,6 +329,11 @@ void Controller::sendBroadcast(int index, int exceptBy){
 		if(controlPlaneLinks[i].id[j] != exceptBy){
 			controlPlaneLinks[i].sockets[1-j]->Send(
 				Create<Packet>((uint8_t*)&payload,sizeof(payload)));
+			//contabilizando energia gasta
+			transmittingConsumption+=8*sizeof(payload)
+				*controlPlaneLinks[i].joulesPerBit*energyPrice;
+			//atualizando estatísticas
+			nCPMsgs++;
 		}
 	}
 }
@@ -369,6 +381,7 @@ Router::Router(double _traffic, double _requestProbability, double _energyPrice,
 	
 	numberOfMessages = 0;
 	numberOfRequests = 0;
+	transmittingConsumption = 0;//em $
 	
 	parent = 0;
 	node = CreateObject<Node>();
@@ -408,6 +421,9 @@ void Router::sendRequest(Time interval){
 			//no caso de um southBound link, o index 1 sempre corresponde ao comutador,
 			//de endereço ipv4 10.1.Y.1
 			southBoundLinks[parent].sockets[1]->Send(Create<Packet>(requestSize));
+			//contabilizando energia gasta
+			transmittingConsumption+=8*requestSize*southBoundLinks[parent].joulesPerBit*energyPrice;
+			//para estatísticas
 			numberOfRequests++;
 		}
 	}
@@ -643,11 +659,14 @@ void Wan::printStatistics(){
 	for(i=0;i<(int)controllers.size();i++){
 		double fixedConsumption = controllers[i]->receivedLastRequest
 			*controllers[i]->fixedEnergy*controllers[i]->energyPrice;
-		double processingConsumption = 0;
-		double transmittingConsumption = 0;
+		double processingConsumption = controllers[i]->numberOfResponses
+			*controllers[i]->processingEnergy
+			*controllers[i]->energyPrice;
+		double transmittingConsumption = controllers[i]->transmittingConsumption;
 		double controllerConsumption = fixedConsumption
 			+processingConsumption+transmittingConsumption;
 		NS_LOG_UNCOND("|"<<i<<"| Respostas: "<<controllers[i]->numberOfResponses
+			<<"; Mensagens de plano de controle: "<<controllers[i]->nCPMsgs
 			<<"; ConsumoFixo: "<<fixedConsumption
 			<<"; Consumo por processamento: "<<processingConsumption
 			<<"; Consumo por transmissão: "<<transmittingConsumption
@@ -658,7 +677,7 @@ void Wan::printStatistics(){
 	double totalRtrConsumption = 0;
 	NS_LOG_UNCOND("Comutadores");
 	for(i=0;i<(int)routers.size();i++){
-		double transmittingConsumption = 0;
+		double transmittingConsumption = routers[i]->transmittingConsumption;
 		NS_LOG_UNCOND("|"<<i<<"| Mensagens: "<<routers[i]->numberOfMessages
 		<< "; Requisições: " << routers[i]->numberOfRequests
 		<< "; Consumo por transmissão: "<<transmittingConsumption);
