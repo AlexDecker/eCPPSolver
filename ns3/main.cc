@@ -206,7 +206,7 @@ int main(int argc, char** argv){
 	Time::SetResolution (Time::NS);
 	srand((unsigned)time(NULL));
 	
-	wan.maxControlLatency = 1;//latência de todos os links deve somar 1s no máximo
+	wan.maxControlLatency = 0.5;//latência de todos os links deve somar 1s no máximo
 	
 	int nLocations = 2;
 	uint32_t msgSize = 1024;//1kb<-Importante, esse valor não pode ser 1. Veja responseHandler
@@ -956,7 +956,7 @@ double Wan::totalControlLatency(TCNode* tcNodes){
 			//encontrando o valor de tempo de propagação do link
 			for(j=0;j<(int)southBoundLinks.size();j++){
 				if((southBoundLinks[j].id[0]==tcNodes[i].parent)
-					&&(southBoundLinks[j].id[1]==1)){
+					&&(southBoundLinks[j].id[1]==i)){
 					lat += southBoundLinks[j].propagationTime;
 				}
 			}
