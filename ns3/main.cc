@@ -95,6 +95,7 @@ class Controller{
 		Controller(double _capacity, double _responseProbability,
 			double _processingEnergy, double fixedEnergy, double _energyPrice,
 			uint32_t _responseSize, int _ID, int _nLocations);
+		Controller(double _energyPrice, int _ID, int _nLocations);
 		~Controller();
 		
 		void addLink(ControlLink link);
@@ -129,6 +130,7 @@ class Router{
 		
 		Router(double _traffic, double _requestProbability, double _energyPrice,
 			uint32_t _requestSize, int _ID);
+		Router(double _traffic, double _energyPrice, int _ID);
 		
 		//insere um southbound link
 		void addLink(ControlLink link);
@@ -206,9 +208,9 @@ int main(int argc, char** argv){
 	Time::SetResolution (Time::NS);
 	srand((unsigned)time(NULL));
 	
-	wan.maxControlLatency = 0.5;//latência de todos os links deve somar 1s no máximo
+	wan.maxControlLatency = 0.05;//latência de todos os links deve somar 1s no máximo
 	
-	int nLocations = 2;
+	int nLocations = 3;
 	uint32_t msgSize = 1024;//1kb<-Importante, esse valor não pode ser 1. Veja responseHandler
 	//para melhores explicações
 	
@@ -217,32 +219,29 @@ int main(int argc, char** argv){
 	//intervalo de envio dentro de um mesmo dispositivo (s)
 	double interval = 0.0000001*msgSize*8;//Vazões de no máximo 10Gbps
 	
-	double capacity = 2000000/(msgSize*8);//2Gbps
-	double responseProbability = 0.5;//50% de chance
-	double processingEnergy = 0.00033;//J/mensagem
-	double fixedEnergy = 600;//600W
-	double energyPrice = 0.000000033;//$/J -> 0.12/kWh
-	double requestProbability = 0.5;//50% de chance
-	double traffic = 1000000/(msgSize*8);//1Gbps
+	//adicionando localidades (controladores e comutadores)
+
+	//Chicago1: 0
+	Controller cChicago1 = Controller(3.25e-8, 0, nLocations);
+	Router rChicago1 = Router(67.9, 3.25e-8, 0);
+	wan.addLocation(&cChicago1, &rChicago1);
+
+	//Chicago2: 1
+	Controller cChicago2 = Controller(3.25e-8, 1, nLocations);
+	Router rChicago2 = Router(67.9, 3.25e-8, 1);
+	wan.addLocation(&cChicago2, &rChicago2);
 	
-	Controller ctrl1 = Controller(capacity, responseProbability, processingEnergy,
-		fixedEnergy, energyPrice, msgSize,0,nLocations);
-	Router rtr1 = Router(traffic, requestProbability, energyPrice, msgSize, 0);
-	
-	Controller ctrl2 = Controller(capacity, responseProbability, processingEnergy,
-		fixedEnergy, energyPrice, msgSize,1,nLocations);
-	Router rtr2 = Router(traffic/2, requestProbability, energyPrice, msgSize, 1);
-	
-	wan.addLocation(&ctrl1, &rtr1);
-	wan.addLocation(&ctrl2, &rtr2);
+	//Chicago3: 2
+	Controller cChicago3 = Controller(3.25e-8, 2, nLocations);
+	Router rChicago3 = Router(67.9, 3.25e-8, 2);
+	wan.addLocation(&cChicago3, &rChicago3);
 	
 	wan.installIpv4();
-	
-	double joulesPerBit = 0.000000033;
-	double propagationTime = 0.5;
-	int node1 = 0;
-	int node2 = 1;
-	wan.addLink(joulesPerBit, propagationTime, node1, node2);
+
+	//adicionando links (southbound e controlPlane)
+	wan.addLink(2.4e-4, 1.2e-4, 0, 1);
+	wan.addLink(2.4e-4, 1.2001e-4, 2, 0);
+	wan.addLink(2.4e-4, 1.2002e-4, 2, 1);
 	
 	NS_LOG_UNCOND("INICIANDO SIMULAÇÃO");
 		
@@ -272,6 +271,29 @@ Controller::Controller(double _capacity, double _responseProbability,
 	fixedEnergy = _fixedEnergy;
 	energyPrice = _energyPrice;//dolares/joule
 	responseSize = _responseSize;//tamanho da resposta em bytes
+	
+	node = CreateObject<Node>();
+	ID = _ID;
+	
+	numberOfResponses = 0;
+	receivedLastRequest = 0;
+	transmittingConsumption = 0;//em $
+	nCPMsgs = 0;
+	
+	//Para o algoritmo de controle de topologia
+	nLocations = _nLocations;
+	demands = (double*) malloc(sizeof(double)*_nLocations);
+	nMessages = 0;
+}
+
+Controller::Controller(double _energyPrice, int _ID, int _nLocations){
+	capacity = 1000000/(1024*8);//requests por segundo
+	//probabilidade de um request gerar um respose
+	responseProbability = 0.5;
+	processingEnergy = 1.8;//média do custo de transmissão/2
+	fixedEnergy = 600;
+	energyPrice = _energyPrice;//dolares/joule
+	responseSize = 1024;//tamanho da resposta em bytes
 	
 	node = CreateObject<Node>();
 	ID = _ID;
@@ -495,8 +517,7 @@ void Controller::posicionadorRelaxado(TCNode* tcNodes){
 void Controller::heuristica1(){
 	int i,j;
 	int nEdgesToCut = 0;
-	int x = 2;
-	while(x--){
+	while(true){
 		//valor de tempo de propagação a partir do qual as arestas serão cortadas
 		//(considero aqui, por motivo de simplificação, que os valores não se repetem.
 		//caso se repitam, diferencie por algum valor infinitesimal)
@@ -565,6 +586,22 @@ Router::Router(double _traffic, double _requestProbability, double _energyPrice,
 	requestProbability = _requestProbability;
 	energyPrice = _energyPrice;//dolares/joule
 	requestSize = _requestSize;//tamanho do request em bytes
+	
+	numberOfMessages = 0;
+	numberOfRequests = 0;
+	transmittingConsumption = 0;//em $
+	
+	parent = 0;
+	node = CreateObject<Node>();
+	ID = _ID;
+}
+
+Router::Router(double _traffic, double _energyPrice, int _ID){
+	traffic = _traffic;//mensagens/s
+	//probabilidade de uma mensagem gerar um request
+	requestProbability = 0.5;
+	energyPrice = _energyPrice;//dolares/joule
+	requestSize = 1024;//tamanho do request em bytes
 	
 	numberOfMessages = 0;
 	numberOfRequests = 0;
