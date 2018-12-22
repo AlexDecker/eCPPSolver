@@ -208,9 +208,8 @@ int main(int argc, char** argv){
 	Time::SetResolution (Time::NS);
 	srand((unsigned)time(NULL));
 	
-	wan.maxControlLatency = 0.05;//latência de todos os links deve somar 1s no máximo
+	wan.maxControlLatency = 0.5;//latência de todos os links deve somar 1s no máximo
 	
-	int nLocations = 3;
 	uint32_t msgSize = 1024;//1kb<-Importante, esse valor não pode ser 1. Veja responseHandler
 	//para melhores explicações
 	
@@ -220,7 +219,8 @@ int main(int argc, char** argv){
 	double interval = 0.0000001*msgSize*8;//Vazões de no máximo 10Gbps
 	
 	//adicionando localidades (controladores e comutadores)
-
+	int nLocations = 6;
+	
 	//Chicago1: 0
 	Controller cChicago1 = Controller(3.25e-8, 0, nLocations);
 	Router rChicago1 = Router(67.9, 3.25e-8, 0);
@@ -236,12 +236,30 @@ int main(int argc, char** argv){
 	Router rChicago3 = Router(67.9, 3.25e-8, 2);
 	wan.addLocation(&cChicago3, &rChicago3);
 	
+	//Milwaukee: 3
+	Controller cMilwaukee = Controller(3.61e-8, 3, nLocations);
+	Router rMilwaukee = Router(31, 3.61e-8, 3);
+	wan.addLocation(&cMilwaukee, &rMilwaukee);
+	
+	//StLouis: 4
+	Controller cStLouis = Controller(2.69e-8, 4, nLocations);
+	Router rStLouis = Router(25, 2.69e-8, 4);
+	wan.addLocation(&cStLouis, &rStLouis);
+	
+	//KansasCity: 5
+	Controller cKansasCity = Controller(2.92e-8, 5, nLocations);
+	Router rKansasCity = Router(10.36, 2.92e-8, 5);
+	wan.addLocation(&cKansasCity, &rKansasCity);
+	
 	wan.installIpv4();
 
 	//adicionando links (southbound e controlPlane)
-	wan.addLink(2.4e-4, 1.2e-4, 0, 1);
-	wan.addLink(2.4e-4, 1.2001e-4, 2, 0);
-	wan.addLink(2.4e-4, 1.2002e-4, 2, 1);
+	wan.addLink(2.4e-4, 8.3e-3, 0, 1);
+	wan.addLink(2.4e-4, 8.3001e-3, 2, 0);
+	wan.addLink(2.4e-4, 8.3002e-3, 2, 1);
+	wan.addLink(1.48e-3, 8.93e-3, 3, 2);
+	wan.addLink(4.78e-3, 1.06e-2, 4, 0);
+	wan.addLink(3.99e-3, 1.01e-2,5,4);
 	
 	NS_LOG_UNCOND("INICIANDO SIMULAÇÃO");
 		
