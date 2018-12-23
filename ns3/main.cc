@@ -3,7 +3,14 @@
 #include "ns3/internet-module.h"
 #include "ns3/point-to-point-module.h"
 
+//latência dentro de uma localidade
 #define LOCAL_LATENCY 1024*8/1000000
+//limite de latência além da mínima necessária para uma solução viável existir
+#define LATENCY_GAP_LIMIT 0.1
+//probabilidade de uma mensagem gerar uma requisição ao controlador
+#define REQ_PROBABILITY 1
+//1 ou 2
+#define HEURISTICA 2
 
 #include <stdio.h>
 #include <time.h>
@@ -32,7 +39,7 @@ typedef struct{
 //estruturas para a segunda parte do algoritmo de controle de topologia
 typedef struct{
 	double demand;//demanda do nó a que este link se direciona
-	double propagationTime;
+	double latency;
 	int to;
 }TCLink;
 
@@ -49,7 +56,7 @@ typedef struct{
 typedef struct{
 	//para a contagem da energia gasta
 	double joulesPerBit;
-	double propagationTime;
+	double latency;
 	//nós cuja interface de rede (deste link) é identificada pelo final index+1
 	Ptr<Node> nodes[2];
 	//sockets correspondentes aos nós supracitados (neste link)
@@ -62,7 +69,7 @@ typedef struct{
 
 //Funções para a comparação em sorts
 bool compPropagation(ControlLink i, ControlLink j){
-	return(i.propagationTime>j.propagationTime);
+	return(i.latency>j.latency);
 }
 bool compDemand(TCLink i, TCLink j){
 	return(i.demand>j.demand);
@@ -109,7 +116,7 @@ class Controller{
 		void cpMessageHandler(Address from, Ptr<Packet> packet);//disseminação de parâmetros
 		void recognizeAsChild(int routerId);//envia uma notificação de paternidade
 		void posicionadorRelaxado(TCNode* tcNodes);//heurística que não considera a restrição de latência
-		void heuristica1();//realiza de fato a otimização
+		void heuristic();//realiza de fato a otimização
 		////
 	private:
 		void sendBroadcast(int index, int exceptBy);
@@ -148,16 +155,15 @@ class Router{
 		uint32_t requestSize;//tamanho do request em bytes
 };
 
-
 class Wan{
 	private:
 		vector<ControlLink> controlPlaneLinks;
 		vector<ControlLink> southBoundLinks;
 		
 		NodeContainer nodes;
-		void addSouthBoundLink(double joulesPerBit, double propagationTime,
+		void addSouthBoundLink(double joulesPerBit, double latency,
 			int controller, int router);
-		void addControlPlaneLink(double joulesPerBit, double propagationTime,
+		void addControlPlaneLink(double joulesPerBit, double latency,
 			int controler1, int controler2);
 		Controller* getControllerFromRouterIP(Address addr);
 		Router* getRouterFromControllerIP(Address addr);
@@ -170,7 +176,7 @@ class Wan{
 		
 		void addLocation(Controller* ctrl, Router* rtr);
 		void installIpv4();
-		void addLink(double joulesPerBit, double propagationTime, int node1,
+		void addLink(double joulesPerBit, double latency, int node1,
 			int node2);
 		//interval é o intervalo dentro do qual essa função é chamada
 		void generateTraffic(Time interval);
@@ -222,7 +228,7 @@ int main(int argc, char** argv){
 	int nLocations = 10;
 	
 	//soma máxima dos enlaces (deve permitir ao menos enlaces locais)
-	wan.maxControlLatency = LOCAL_LATENCY*nLocations + 0.05;
+	wan.maxControlLatency = LOCAL_LATENCY*nLocations + LATENCY_GAP_LIMIT;
 	
 	//Chicago1: 0
 	Controller cChicago1 = Controller(3.25e-8, 0, nLocations);
@@ -453,7 +459,7 @@ void Controller::cpMessageHandler(Address from, Ptr<Packet> packet){
 		sendBroadcast(payload.ownerId, payload.fromId);
 		nMessages++;
 		if(nMessages==nLocations){
-			heuristica1();
+			heuristic();
 		}
 	}
 }
@@ -560,7 +566,7 @@ void Controller::posicionadorRelaxado(TCNode* tcNodes){
 	}
 }
 
-void Controller::heuristica1(){
+void Controller::heuristic(){
 	int i,j;
 	int nEdgesToCut = 0;
 	int nIterations = 0;
@@ -587,14 +593,14 @@ void Controller::heuristica1(){
 				//verificando também se há um limite de tempo de propagação a ser obedecido
 				//(lim!=-1) e o enlace obedece esse limite
 				if((wan.controllers[i]->southBoundLinks[j].id[1]!=wan.controllers[i]->ID)
-					&&((wan.controllers[i]->southBoundLinks[j].propagationTime<lim)
+					&&((wan.controllers[i]->southBoundLinks[j].latency<lim)
 					|| lim==-1)){
 					
 					TCLink link;
 					
 					link.to = wan.controllers[i]->southBoundLinks[j].id[1];//id do nó a que esse link leva
 					link.demand = demands[link.to];
-					link.propagationTime = wan.controllers[i]->southBoundLinks[j].propagationTime;
+					link.latency = wan.controllers[i]->southBoundLinks[j].latency;
 					tcNodes[i].neighborhood.push_back(link);
 				}
 			}
@@ -605,7 +611,7 @@ void Controller::heuristica1(){
 			//inicial
 			NS_LOG_UNCOND("cap:"<<tcNodes[i].residualCapacity<<"; peso: "<<tcNodes[i].weight<<"; demand: "<<demands[i]);
 			for(j=0;j<(int)tcNodes[i].neighborhood.size();j++){
-				NS_LOG_UNCOND("  pt:"<<tcNodes[i].neighborhood[j].propagationTime<<"; demand:"<<tcNodes[i].neighborhood[j].demand);
+				NS_LOG_UNCOND("  pt:"<<tcNodes[i].neighborhood[j].latency<<"; demand:"<<tcNodes[i].neighborhood[j].demand);
 			}
 		}
 		NS_LOG_UNCOND("\\");*/
@@ -648,7 +654,7 @@ Router::Router(double _traffic, double _requestProbability, double _energyPrice,
 Router::Router(double _traffic, double _energyPrice, int _ID){
 	traffic = _traffic;//mensagens/s
 	//probabilidade de uma mensagem gerar um request
-	requestProbability = 0.1;
+	requestProbability = REQ_PROBABILITY;
 	energyPrice = _energyPrice;//dolares/joule
 	requestSize = 1024;//tamanho do request em bytes
 	
@@ -750,25 +756,25 @@ void Wan::installIpv4(){
 	}
 }
 
-void Wan::addLink(double joulesPerBit, double propagationTime, int node1,
+void Wan::addLink(double joulesPerBit, double latency, int node1,
 	int node2){
-	addSouthBoundLink(joulesPerBit, propagationTime, node1, node2);
-	addSouthBoundLink(joulesPerBit, propagationTime, node2, node1);
-	addControlPlaneLink(joulesPerBit, propagationTime, node1, node2);
+	addSouthBoundLink(joulesPerBit, latency, node1, node2);
+	addSouthBoundLink(joulesPerBit, latency, node2, node1);
+	addControlPlaneLink(joulesPerBit, latency, node1, node2);
 }
 
-void Wan::addSouthBoundLink(double joulesPerBit, double propagationTime,
+void Wan::addSouthBoundLink(double joulesPerBit, double latency,
 	int controller, int router){
 	ControlLink link;
 	link.joulesPerBit = joulesPerBit;
-	link.propagationTime = propagationTime;
+	link.latency = latency;
 	link.nodes[0] = controllers[controller]->node;
 	link.nodes[1] = routers[router]->node;
 	link.id[0] = controller;
 	link.id[1] = router;
 	//configurando conexão ponto a ponto
 	char ptime[50];
-	sprintf(ptime,"%fms",propagationTime);
+	sprintf(ptime,"%fms",latency);
 	PointToPointHelper pointToPoint;
 	pointToPoint.SetDeviceAttribute("DataRate", StringValue("5Mbps"));
 	pointToPoint.SetChannelAttribute("Delay", StringValue(ptime));
@@ -814,18 +820,18 @@ void Wan::addSouthBoundLink(double joulesPerBit, double propagationTime,
 	routers[router]->addLink(link);
 }
 
-void Wan::addControlPlaneLink(double joulesPerBit, double propagationTime,
+void Wan::addControlPlaneLink(double joulesPerBit, double latency,
 	int controller1, int controller2){
 	ControlLink link;
 	link.joulesPerBit = joulesPerBit;
-	link.propagationTime = propagationTime;
+	link.latency = latency;
 	link.nodes[0] = controllers[controller1]->node;
 	link.nodes[1] = controllers[controller2]->node;
 	link.id[0] = controller1;
 	link.id[1] = controller2;
 	//configurando conexão ponto a ponto
 	char ptime[50];
-    sprintf(ptime ,"%fms", propagationTime);
+    sprintf(ptime ,"%fms", latency);
     PointToPointHelper pointToPoint;
     pointToPoint.SetDeviceAttribute("DataRate", StringValue("5Mbps"));
 	pointToPoint.SetChannelAttribute("Delay", StringValue(ptime));
@@ -1028,7 +1034,7 @@ double Wan::limitToCut(int nEdgesToCut){
 		//ordenando por tempo de propagação
 		std::sort(links.begin(), links.end(), compPropagation);
 		
-		return(links[nEdgesToCut-1].propagationTime);
+		return(links[nEdgesToCut-1].latency);
 	}
 }
 
@@ -1043,7 +1049,7 @@ double Wan::totalControlLatency(TCNode* tcNodes){
 			for(j=0;j<(int)southBoundLinks.size();j++){
 				if((southBoundLinks[j].id[0]==tcNodes[i].parent)
 					&&(southBoundLinks[j].id[1]==i)){
-					lat += southBoundLinks[j].propagationTime;
+					lat += southBoundLinks[j].latency;
 				}
 			}
 		}else{
