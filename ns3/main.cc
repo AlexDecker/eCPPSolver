@@ -3,6 +3,8 @@
 #include "ns3/internet-module.h"
 #include "ns3/point-to-point-module.h"
 
+#define LOCAL_LATENCY 1024*8/1000000
+
 #include <stdio.h>
 #include <time.h>
 #include <vector>
@@ -202,13 +204,11 @@ int main(int argc, char** argv){
 	CommandLine cmd;
 	cmd.Parse (argc, argv);
 	
-	double finishTime = 10.0;	//(s)
+	double finishTime = 100.0;	//(s)
 	
 	//resolução de tempo em nanossegundos
 	Time::SetResolution (Time::NS);
 	srand((unsigned)time(NULL));
-	
-	wan.maxControlLatency = 0.5;//latência de todos os links deve somar 1s no máximo
 	
 	uint32_t msgSize = 1024;//1kb<-Importante, esse valor não pode ser 1. Veja responseHandler
 	//para melhores explicações
@@ -220,6 +220,9 @@ int main(int argc, char** argv){
 	
 	//adicionando localidades (controladores e comutadores)
 	int nLocations = 10;
+	
+	//soma máxima dos enlaces (deve permitir ao menos enlaces locais)
+	wan.maxControlLatency = LOCAL_LATENCY*nLocations + 0.05;
 	
 	//Chicago1: 0
 	Controller cChicago1 = Controller(3.25e-8, 0, nLocations);
@@ -560,7 +563,9 @@ void Controller::posicionadorRelaxado(TCNode* tcNodes){
 void Controller::heuristica1(){
 	int i,j;
 	int nEdgesToCut = 0;
+	int nIterations = 0;
 	while(true){
+		nIterations++;
 		//valor de tempo de propagação a partir do qual as arestas serão cortadas
 		//(considero aqui, por motivo de simplificação, que os valores não se repetem.
 		//caso se repitam, diferencie por algum valor infinitesimal)
@@ -618,6 +623,7 @@ void Controller::heuristica1(){
 			nEdgesToCut++;
 		}
 	}
+	NS_LOG_UNCOND("Número de iterações na Heurística: "<<nIterations);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -642,7 +648,7 @@ Router::Router(double _traffic, double _requestProbability, double _energyPrice,
 Router::Router(double _traffic, double _energyPrice, int _ID){
 	traffic = _traffic;//mensagens/s
 	//probabilidade de uma mensagem gerar um request
-	requestProbability = 0.5;
+	requestProbability = 0.1;
 	energyPrice = _energyPrice;//dolares/joule
 	requestSize = 1024;//tamanho do request em bytes
 	
@@ -1031,7 +1037,7 @@ double Wan::totalControlLatency(TCNode* tcNodes){
 	double lat = 0;
 	//o tamanho de 'routers' é usado por ser exatamente o número de localidades
 	for(i=0;i<(int)routers.size();i++){
-		//links dentro de uma mesma localidade tem tempo de propagação 0
+		//verificando se o link é interno à localidade
 		if(tcNodes[i].parent != i){
 			//encontrando o valor de tempo de propagação do link
 			for(j=0;j<(int)southBoundLinks.size();j++){
@@ -1040,6 +1046,8 @@ double Wan::totalControlLatency(TCNode* tcNodes){
 					lat += southBoundLinks[j].propagationTime;
 				}
 			}
+		}else{
+			lat += LOCAL_LATENCY;
 		}
 	}
 	return lat;
