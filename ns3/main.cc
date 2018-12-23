@@ -219,7 +219,7 @@ int main(int argc, char** argv){
 	double interval = 0.0000001*msgSize*8;//Vazões de no máximo 10Gbps
 	
 	//adicionando localidades (controladores e comutadores)
-	int nLocations = 6;
+	int nLocations = 10;
 	
 	//Chicago1: 0
 	Controller cChicago1 = Controller(3.25e-8, 0, nLocations);
@@ -251,6 +251,26 @@ int main(int argc, char** argv){
 	Router rKansasCity = Router(10.36, 2.92e-8, 5);
 	wan.addLocation(&cKansasCity, &rKansasCity);
 	
+	//Minneapolis: 6
+	Controller cMinneapolis = Controller(3.03e-8, 6, nLocations);
+	Router rMinneapolis = Router(19.94, 3.03e-8, 6);
+	wan.addLocation(&cMinneapolis, &rMinneapolis);
+	
+	//Madison: 7
+	Controller cMadison = Controller(3.6e-8, 7, nLocations);
+	Router rMadison = Router(31.03, 3.6e-8, 7);
+	wan.addLocation(&cMadison, &rMadison);
+	
+	//Tulsa: 8
+	Controller cTulsa = Controller(2.56e-8, 8, nLocations);
+	Router rTulsa = Router(16.42, 2.56e-8, 8);
+	wan.addLocation(&cTulsa, &rTulsa);
+	
+	//Indianapolis: 9
+	Controller cIndianapolis = Controller(2.78e-8, 9, nLocations);
+	Router rIndianapolis = Router(53.69, 2.78e-8, 9);
+	wan.addLocation(&cIndianapolis, &rIndianapolis);
+	
 	wan.installIpv4();
 
 	//adicionando links (southbound e controlPlane)
@@ -259,7 +279,12 @@ int main(int argc, char** argv){
 	wan.addLink(2.4e-4, 8.3002e-3, 2, 1);
 	wan.addLink(1.48e-3, 8.93e-3, 3, 2);
 	wan.addLink(4.78e-3, 1.06e-2, 4, 0);
-	wan.addLink(3.99e-3, 1.01e-2,5,4);
+	wan.addLink(3.99e-3, 1.01e-2, 5, 4);
+	wan.addLink(7.03e-3, 1.17e-2, 6, 5);
+	wan.addLink(4.3e-3, 1.04e-2, 7, 6);
+	wan.addLink(1.27e-3, 8.8e-3, 7, 3);
+	wan.addLink(4.3e-3, 1.04e-2, 8, 5);
+	wan.addLink(2.9e-3, 9.6e-3, 9, 0);
 	
 	NS_LOG_UNCOND("INICIANDO SIMULAÇÃO");
 		
