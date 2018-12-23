@@ -6,9 +6,9 @@
 //latência dentro de uma localidade
 #define LOCAL_LATENCY 1024*8/1000000
 //limite de latência além da mínima necessária para uma solução viável existir
-#define LATENCY_GAP_LIMIT 0.1
+#define LATENCY_GAP_LIMIT 0.05
 //probabilidade de uma mensagem gerar uma requisição ao controlador
-#define REQ_PROBABILITY 1
+#define REQ_PROBABILITY 0.5
 //1 ou 2
 #define HEURISTICA 2
 
@@ -40,14 +40,20 @@ typedef struct{
 typedef struct{
 	double demand;//demanda do nó a que este link se direciona
 	double latency;
+	double guestCost;//preço de servir esse comutador ($/s)
 	int to;
 }TCLink;
 
 typedef struct{
-	double residualCapacity;
-	double weight;
-	int parent;
-	bool hasController;
+	double residualCapacity;//o quanto de carga extra que ainda pode ser toledada
+	
+	//preços ($/s)
+	double fixedCost;//preço do controlador ficar ligado
+	double autoCost;//preço do controlador satisfazer o próprio comutador
+	
+	int parent;//localidade cujo controlador serve este comutador
+	bool hasController;//há um controlador ligado nesta localidade?
+	
 	vector<TCLink> neighborhood;
 }TCNode;
 
@@ -115,7 +121,11 @@ class Controller{
 		void initializeTopologyAlgorithm();//começa a divulgar os parâmetros
 		void cpMessageHandler(Address from, Ptr<Packet> packet);//disseminação de parâmetros
 		void recognizeAsChild(int routerId);//envia uma notificação de paternidade
-		void posicionadorRelaxado(TCNode* tcNodes);//heurística que não considera a restrição de latência
+		
+		//heurísticas que não consideram a restrição de latência
+		void posicionadorRelaxado1(TCNode* tcNodes);
+		void posicionadorRelaxado2(TCNode* tcNodes);
+		
 		void heuristic();//realiza de fato a otimização
 		////
 	private:
@@ -136,6 +146,8 @@ class Router{
 		
 		double traffic;//mensagens/ns
 		double requestProbability;//probabilidade de uma mensagem gerar um request
+		double energyPrice;//dolares/joule
+		uint32_t requestSize;//tamanho do request em bytes
 		
 		Router(double _traffic, double _requestProbability, double _energyPrice,
 			uint32_t _requestSize, int _ID);
@@ -150,9 +162,6 @@ class Router{
 		//contabiliza a energia gasta pelo recebimento e processamento da resposta
 		//e a transmissão da mensagem
 		void responseHandler(Address from, Ptr<Packet> packet);
-	private:
-		double energyPrice;//dolares/joule
-		uint32_t requestSize;//tamanho do request em bytes
 };
 
 class Wan{
@@ -476,7 +485,7 @@ void Controller::recognizeAsChild(int routerId){
 }
 
 //heurística sem considerar a restrição de latência
-void Controller::posicionadorRelaxado(TCNode* tcNodes){
+void Controller::posicionadorRelaxado1(TCNode* tcNodes){
 	int i,j,k;
 	int ndNodes = nLocations;//no início, nenhum nó está dominado
 	while(ndNodes>0){
@@ -485,9 +494,11 @@ void Controller::posicionadorRelaxado(TCNode* tcNodes){
 		int node, ind; double maxEff = 0;
 		for(i=0;i<nLocations;i++){
 			if(!tcNodes[i].hasController){//busque instalar um controlador se não houver um aqui
+				double weight = tcNodes[i].fixedCost;
 				double demandSum;
 				if(tcNodes[i].parent==-1){
 					demandSum = demands[i];//se não foi dominado ainda, deve atender a própria demanda
+					weight += tcNodes[i].autoCost;
 				}else{
 					demandSum = 0;
 				}
@@ -500,8 +511,102 @@ void Controller::posicionadorRelaxado(TCNode* tcNodes){
 					}
 				}
 				//verificando se a eficiência é maior do que a que já se tinha conhecimento
-				if(maxEff<=j/tcNodes[i].weight){
-					maxEff = j/tcNodes[i].weight;
+				if(maxEff<=j/weight){
+					maxEff = j/weight;
+					ind = j;//o penúltimo valor de j foi o último a respeitar a capacidade residual 
+					node = i;
+				}
+			}
+		}
+		
+		//O nó de maior eficiência passa a ter um controlador
+		tcNodes[node].hasController = true;
+		
+		//os ind primeiros nós são dominados por node
+		for(i=0;i<ind;i++){
+			tcNodes[node].residualCapacity -= tcNodes[node].neighborhood[i].demand;
+			tcNodes[tcNodes[node].neighborhood[i].to].parent = node;
+			ndNodes--;
+			//retirando esse nó das vizinhanças de outros nós
+			for(j=0;j<nLocations;j++){
+				if(j!=node){
+					k=0;
+					while(k<(int)tcNodes[j].neighborhood.size()){
+						//verificando se é para um nó dominado
+						if(tcNodes[j].neighborhood[k].to==tcNodes[node].neighborhood[i].to){
+							//se sim, retire-o. Não avance o apontador, a remoção deste valor
+							//trará o próximo
+							tcNodes[j].neighborhood.erase(tcNodes[j].neighborhood.begin()+k);
+						}else{
+							//senão, avance o apontador
+							k++;
+						}
+					}
+				}
+			}
+		}
+		
+		//eliminando os nós dominados por node
+		for(i=0;i<ind;i++){
+			tcNodes[node].neighborhood.erase(tcNodes[node].neighborhood.begin());
+		}
+		
+		//se node ainda não foi dominado
+		if(tcNodes[node].parent==-1){
+			tcNodes[node].residualCapacity -= demands[node];
+			tcNodes[node].parent = node;
+			ndNodes--;
+			//retirando esse nó das vizinhanças de outros nós
+			for(j=0;j<nLocations;j++){
+				if(j!=node){
+					k=0;
+					while(k<(int)tcNodes[j].neighborhood.size()){
+						//verificando se é para o nó em questão
+						if(tcNodes[j].neighborhood[k].to==node){
+							//se sim, retire-o. Não avance o apontador, a remoção deste valor
+							//trará o próximo
+							tcNodes[j].neighborhood.erase(tcNodes[j].neighborhood.begin()+k);
+						}else{
+							//senão, avance o apontador
+							k++;
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+//heurística sem considerar a restrição de latência
+void Controller::posicionadorRelaxado2(TCNode* tcNodes){
+	int i,j,k;
+	int ndNodes = nLocations;//no início, nenhum nó está dominado
+	while(ndNodes>0){
+		//buscando o nó de maior eficiência, o index que a maximiza e a eficiência
+		//em si
+		int node, ind; double maxEff = 0;
+		for(i=0;i<nLocations;i++){
+			if(!tcNodes[i].hasController){//busque instalar um controlador se não houver um aqui
+				double weight = tcNodes[i].fixedCost;
+				double demandSum;
+				if(tcNodes[i].parent==-1){
+					demandSum = demands[i];//se não foi dominado ainda, deve atender a própria demanda
+					weight += tcNodes[i].autoCost;
+				}else{
+					demandSum = 0;
+				}
+				//verificando quantos nós pode atender
+				for(j=0;j<(int)tcNodes[i].neighborhood.size();j++){
+					if(demandSum+tcNodes[i].neighborhood[j].demand<=tcNodes[i].residualCapacity){
+						demandSum += tcNodes[i].neighborhood[j].demand;
+						weight += tcNodes[i].neighborhood[j].guestCost;
+					}else{
+						break;
+					}
+				}
+				//verificando se a eficiência é maior do que a que já se tinha conhecimento
+				if(maxEff<=demandSum/weight){
+					maxEff = demandSum/weight;
 					ind = j;//o penúltimo valor de j foi o último a respeitar a capacidade residual 
 					node = i;
 				}
@@ -584,9 +689,10 @@ void Controller::heuristic(){
 			tcNodes[i].parent = -1;
 			tcNodes[i].hasController = false;
 			tcNodes[i].residualCapacity = wan.controllers[i]->capacity;
-			tcNodes[i].weight = wan.controllers[i]->energyPrice
-				*(wan.controllers[i]->fixedEnergy
-				+ demands[i] * wan.controllers[i]->processingEnergy);
+			tcNodes[i].fixedCost = wan.controllers[i]->energyPrice
+				* wan.controllers[i]->fixedEnergy;
+			tcNodes[i].autoCost = wan.controllers[i]->energyPrice
+				* demands[i] * wan.controllers[i]->processingEnergy;
 			tcNodes[i].neighborhood.clear();//assegurando que está vazio
 			for(j=0;j<(int)wan.controllers[i]->southBoundLinks.size();j++){
 				//verificando se o link é para uma localidade externa ao controlador i
@@ -601,6 +707,16 @@ void Controller::heuristic(){
 					link.to = wan.controllers[i]->southBoundLinks[j].id[1];//id do nó a que esse link leva
 					link.demand = demands[link.to];
 					link.latency = wan.controllers[i]->southBoundLinks[j].latency;
+					link.guestCost = demands[link.to]
+						* (wan.controllers[i]->energyPrice
+							* (wan.controllers[i]->processingEnergy
+								+ wan.controllers[i]->responseProbability
+								* southBoundLinks[j].joulesPerBit
+								* 8 * wan.controllers[i]->responseSize)
+						+ wan.controllers[link.to]->energyPrice
+						* southBoundLinks[j].joulesPerBit
+							* 8 * wan.routers[link.to]->requestSize);
+					
 					tcNodes[i].neighborhood.push_back(link);
 				}
 			}
@@ -616,7 +732,10 @@ void Controller::heuristic(){
 		}
 		NS_LOG_UNCOND("\\");*/
 		
-		posicionadorRelaxado(tcNodes);
+		if(HEURISTICA==1)
+			posicionadorRelaxado1(tcNodes);
+		else
+			posicionadorRelaxado2(tcNodes);
 		
 		if(wan.totalControlLatency(tcNodes)<=wan.maxControlLatency){
 			for(i=0;i<nLocations;i++){
