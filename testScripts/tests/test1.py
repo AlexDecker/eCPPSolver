@@ -32,7 +32,7 @@ while True:
 				generateXMLInput.gen(nNodes=n,edgeDivisor=eDiv,\
 						minLongitude=l,maxLongitude=l,\
 						minLatitude =l,maxLatitude =l,\
-						controllerResponseFrequency=100000000000000000)
+						controllerResponseFrequency=-1)
 				
 				attempts=0
 				while attempts<5:
