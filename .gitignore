@@ -4,3 +4,4 @@
 *.txt
 testScripts/tests/generatedInput.xml
 *.log
+*$*
